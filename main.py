@@ -17,7 +17,7 @@ chat_id = os.getenv('TG_CHAT_ID')
 today = datetime.today()
 current_year_month = today.strftime('%Y-%m')  # 格式如 "2026-06"
 
-# 2. 每日催繳、預告與到期檢查邏輯（發送獨立訊息並帶有「確認收租」按鈕）
+# 2. 每日催繳、預告與到期檢查邏輯
 def check_tenants_and_notify():
     if not bot_token or not chat_id:
         print("❌ 錯誤：未偵測到環境變數 TG_BOT_TOKEN 或 TG_CHAT_ID")
@@ -28,7 +28,7 @@ def check_tenants_and_notify():
     for t in tenants:
         loc_room = f"📍 <b>[{t['location']} - {t['room']}]</b>"
         reminders = []
-        buttons.append([{"text": f"🟢 確認收到 {t['name']} 租金", "callback_data": f"pay_{t['location']}_{t['room']}"}])
+        buttons = []  # ✅ 修正：在這裡正確宣告乾淨的按鈕陣列
 
         # ─── 條件 A：檢查【收租預告】(當月繳租日前 3 天) ───
         try:
@@ -45,7 +45,6 @@ def check_tenants_and_notify():
             pass
 
         # ─── 條件 B：檢查【未收租催繳】───
-        # 今天已經過了繳租日，且最後付款日的月份不是這個月
         last_paid_ym = t['last_paid_date'][:7] if t['last_paid_date'] else ""
         if today.day > t['pay_day'] and last_paid_ym != current_year_month:
             reminders.append(
@@ -54,10 +53,8 @@ def check_tenants_and_notify():
                 f"🚨 狀態：⚠️ <b>【未收租催繳】</b>尚未登記 {current_year_month} 月的租金！\n"
                 f"📅 上次付款日：<code>{t['last_paid_date'] or '無紀錄'}</code>"
             )
-            # 💡 關鍵：只有催繳時，下方帶入「確認收租」按鈕，傳送該房客的特定資料給 Repository Dispatch
-            # 這裡為了純 GitHub 架構，按鈕改為觸發 Repository Dispatch 的說明（配合後面方案調整）
-            # 目前先以 callback_data 示意，或直接導向未來的一鍵確認連結
-            buttons.append([{"text": f"🟢 確認收到 {t['name']} 租金", "callback_data": f"pay_{t['location']}_{t['room']}"}])
+            # ✅ 修正：精簡 callback_data 移除中文，只留房號避免長度超標，按鈕才能成功顯示
+            buttons.append([{"text": f"🟢 確認收到 {t['name']} 租金", "callback_data": f"pay_{t['room']}"}])
 
         # ─── 條件 C：檢查【租約到期提醒】(結束日前 30 天內) ───
         contract_end_date = datetime.strptime(t['contract_end'], '%Y-%m-%d')
@@ -71,7 +68,7 @@ def check_tenants_and_notify():
                 f"💡 提示：合約剩餘 <b>{days_to_contract_end}</b> 天，請準備連繫續約。"
             )
 
-        # ─── 如果該房客符合上述任一條件，單獨發送一則訊息 ───
+        # ─── 如果該房客符合上述任一條件，單獨發送訊息 ───
         if reminders:
             has_notification = True
             message_text = "\n".join(reminders)
@@ -92,8 +89,7 @@ def check_tenants_and_notify():
     if not has_notification:
         print("🎉 檢查完畢：今日無任何房客需要催繳或預告！")
 
-# 3. 主選單訊息（包含「➕ 填寫新房客資料」按鈕）
-# 請檢查並替換 main.py 中的 send_main_menu 區塊：
+# 3. 主選單訊息
 def send_main_menu():
     if not bot_token or not chat_id:
         print("❌ 錯誤：未偵測到環境變數，無法發送主選單。")
@@ -124,9 +120,13 @@ def send_main_menu():
     print("正在發送主選單...")
     res = requests.post(url, json=payload)
     print(f"主選單發送回應: {res.status_code} - {res.text}")
+
+# ─── 💡 修正：主程式進入點，各司其職 ───
+if __name__ == "__main__":
+    print("🚀 開始執行房東管理檢查...")
     
-    # 執行每日通知檢查
+    # 1. 執行每日通知與催繳檢查
     check_tenants_and_notify()
     
-    # 每次執行時，也順便發送主選單按鈕，方便隨時點擊「新增房客」
+    # 2. 發送主選單按鈕（方便隨時點擊）
     send_main_menu()
