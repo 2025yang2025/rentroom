@@ -28,7 +28,7 @@ def check_tenants_and_notify():
     for t in tenants:
         loc_room = f"📍 <b>[{t['location']} - {t['room']}]</b>"
         reminders = []
-        buttons = []  # ✅ 修正：在這裡正確宣告乾淨的按鈕陣列
+        buttons = []
 
         # ─── 條件 A：檢查【收租預告】(當月繳租日前 3 天) ───
         try:
@@ -53,11 +53,13 @@ def check_tenants_and_notify():
                 f"🚨 狀態：⚠️ <b>【未收租催繳】</b>尚未登記 {current_year_month} 月的租金！\n"
                 f"📅 上次付款日：<code>{t['last_paid_date'] or '無紀錄'}</code>"
             )
-            # ✅ 修正：精簡 callback_data 移除中文，只留房號避免長度超標，按鈕才能成功顯示
-            buttons.append([{
-    "text": f"🟢 確認收到 {t['name']} 租金", 
-    "web_app": {"url": f"https://2025yang2025.github.io/rent-form/confirm.html?room={t['room']}&location={t['location']}"}
-}])
+            # 💡 升級：透過 web_app 安全將房間與地點傳入確認網頁
+            buttons.append([
+                {
+                    "text": f"🟢 確認收到 {t['name']} 租金", 
+                    "web_app": {"url": f"https://2025yang2025.github.io/rent-form/confirm.html?room={t['room']}&location={t['location']}"}
+                }
+            ])
 
         # ─── 條件 C：檢查【租約到期提醒】(結束日前 30 天內) ───
         contract_end_date = datetime.strptime(t['contract_end'], '%Y-%m-%d')
@@ -118,7 +120,7 @@ def send_main_menu():
     res = requests.post(url, json=payload)
     print(f"主選單發送回應: {res.status_code} - {res.text}")
 
-# ─── 💡 修正：主程式進入點，各司其職 ───
+# ─── 主程式進入點 ───
 if __name__ == "__main__":
     print("🚀 開始執行房東管理檢查...")
     
