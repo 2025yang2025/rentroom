@@ -28,7 +28,7 @@ def check_tenants_and_notify():
     for t in tenants:
         loc_room = f"📍 <b>[{t['location']} - {t['room']}]</b>"
         reminders = []
-        buttons = []
+        buttons.append([{"text": f"🟢 確認收到 {t['name']} 租金", "callback_data": f"pay_{t['location']}_{t['room']}"}])
 
         # ─── 條件 A：檢查【收租預告】(當月繳租日前 3 天) ───
         try:
@@ -93,6 +93,7 @@ def check_tenants_and_notify():
         print("🎉 檢查完畢：今日無任何房客需要催繳或預告！")
 
 # 3. 主選單訊息（包含「➕ 填寫新房客資料」按鈕）
+# 請檢查並替換 main.py 中的 send_main_menu 區塊：
 def send_main_menu():
     if not bot_token or not chat_id:
         print("❌ 錯誤：未偵測到環境變數，無法發送主選單。")
@@ -106,11 +107,16 @@ def send_main_menu():
         "reply_markup": {
             "inline_keyboard": [
                 [
-                    # 透過你的 GitHub Pages 網址開啟 Web App 彈出表單
-                    {"text": "➕ 填寫新房客資料", "web_app": {"url": "https://2025yang2025.github.io/rent-form/add.html"}}
+                    {
+                        "text": "➕ 填寫新房客資料", 
+                        "web_app": {"url": "https://2025yang2025.github.io/rent-form/add.html"}
+                    }
                 ],
                 [
-                    {"text": "📊 查看所有房客狀態", "callback_data": "view_all"}
+                    {
+                        "text": "📊 查看所有房客狀態", 
+                        "callback_data": "view_all"
+                    }
                 ]
             ]
         }
@@ -118,10 +124,6 @@ def send_main_menu():
     print("正在發送主選單...")
     res = requests.post(url, json=payload)
     print(f"主選單發送回應: {res.status_code} - {res.text}")
-
-# ─── 執行主程式 ───
-if __name__ == "__main__":
-    print("🚀 開始執行房東管理檢查...")
     
     # 執行每日通知檢查
     check_tenants_and_notify()
