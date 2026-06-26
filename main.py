@@ -22,7 +22,7 @@ def send_main_menu():
             "inline_keyboard": [
                 [
                     # 透過 Telegram 內建網頁（Web App）直接開啟精美網頁輸入欄位！
-                    {"text": "➕ 填寫新房客資料", "web_app": {"url": f"https://{os.getenv('GH_USERNAME')}.github.io/{os.getenv('GH_REPO')}/add.html"}}
+                    {"text": "➕ 填寫新房客資料", "web_app": {"url": f"https://2025yang2025.github.io/rent-form/add.html"}}
                 ],
                 [
                     {"text": "📊 查看所有房客狀態", "callback_data": "view_all"}
