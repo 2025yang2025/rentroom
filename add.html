@@ -1,0 +1,34 @@
+<form id="tenantForm">
+  <input type="text" id="location" placeholder="地點">
+  <input type="text" id="room" placeholder="房間">
+  <input type="text" id="name" placeholder="姓名">
+  <input type="number" id="rent" placeholder="租金">
+  <input type="number" id="pay_day" placeholder="付款日期(號)">
+  <input type="date" id="contract_start" placeholder="合約開始">
+  <input type="date" id="contract_end" placeholder="合約結束">
+  <button type="button" onclick="submitData()">🚀 送出新增</button>
+</form>
+
+<script>
+function submitData() {
+  // 當點擊送出時，這段 JavaScript 會直接呼叫 GitHub API
+  // 觸發你的 GitHub Actions 腳本，並把輸入的資料傳過去！
+  fetch('https://api.github.com/repos/你的帳號/你的倉庫/dispatches', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'token 你的GitHub_PAT_TOKEN',
+      'Accept': 'application/vnd.github.v3+json'
+    },
+    body: JSON.stringify({
+      event_type: 'add_new_tenant', // 自訂事件名稱
+      client_payload: {
+        location: document.getElementById('location').value,
+        room: document.getElementById('room').value,
+        name: document.getElementById('name').value,
+        rent: document.getElementById('rent').value
+        // ...其餘欄位
+      }
+    })
+  }).then(() => alert('資料已送出，GitHub 正在後台更新中...'));
+}
+</script>
