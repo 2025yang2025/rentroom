@@ -55,11 +55,11 @@ def check_tenants_and_notify():
             )
             # 💡 升級：透過 web_app 安全將房間與地點傳入確認網頁
             buttons.append([
-                {
-                    "text": f"🟢 確認收到 {t['name']} 租金", 
-                    "web_app": {"url": f"https://2025yang2025.github.io/rent-form/confirm.html?room={t['room']}&location={t['location']}"}
-                }
-            ])
+    {
+        "text": f"🟢 確認收到 {t['name']} 租金", 
+        "url": f"https://2025yang2025.github.io/rent-form/confirm.html?room={t['room']}&location={t['location']}"
+    }
+])
 
         # ─── 條件 C：檢查【租約到期提醒】(結束日前 30 天內) ───
         contract_end_date = datetime.strptime(t['contract_end'], '%Y-%m-%d')
@@ -103,14 +103,14 @@ def send_main_menu():
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {
         "chat_id": chat_id,
-        "text": "👑 <b>房東管理主選單</b>\n\n歡迎使用免主機管理系統！請點擊下方按鈕新增房客：",
+        "text": "👑 <b>房東管理主選單</b>\n\n歡迎使用管理系統！請點擊下方連結前往操作：",
         "parse_mode": "HTML",
         "reply_markup": {
             "inline_keyboard": [
                 [
                     {
-                        "text": "➕ 填寫新房客資料", 
-                        "web_app": {"url": "https://2025yang2025.github.io/rent-form/add.html"}
+                        "text": "➕ 填寫新房客資料 (前往網頁)", 
+                        "url": "https://2025yang2025.github.io/rent-form/add.html"
                     }
                 ]
             ]
