@@ -1,34 +1,110 @@
-<form id="tenantForm">
-  <input type="text" id="location" placeholder="地點">
-  <input type="text" id="room" placeholder="房間">
-  <input type="text" id="name" placeholder="姓名">
-  <input type="number" id="rent" placeholder="租金">
-  <input type="number" id="pay_day" placeholder="付款日期(號)">
-  <input type="date" id="contract_start" placeholder="合約開始">
-  <input type="date" id="contract_end" placeholder="合約結束">
-  <button type="button" onclick="submitData()">🚀 送出新增</button>
-</form>
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>新增房客資料</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--tg-theme-bg-color, #f5f5f5); color: var(--tg-theme-text-color, #333); padding: 20px; }
+    .form-group { margin-bottom: 15px; }
+    label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 14px; }
+    input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+    button { width: 100%; padding: 12px; background-color: var(--tg-theme-button-color, #2481cc); color: var(--tg-theme-button-text-color, #fff); border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+    button:active { opacity: 0.8; }
+  </style>
+</head>
+<body>
 
-<script>
-function submitData() {
-  // 當點擊送出時，這段 JavaScript 會直接呼叫 GitHub API
-  // 觸發你的 GitHub Actions 腳本，並把輸入的資料傳過去！
-  fetch('https://api.github.com/repos/你的帳號/你的倉庫/dispatches', {
-    method: 'POST',
-    headers: {
-      'Authorization': 'token 你的GitHub_PAT_TOKEN',
-      'Accept': 'application/vnd.github.v3+json'
-    },
-    body: JSON.stringify({
-      event_type: 'add_new_tenant', // 自訂事件名稱
-      client_payload: {
+  <h3>➕ 新增房客資料</h3>
+  
+  <div class="form-group">
+    <label>地點</label>
+    <input type="text" id="location" placeholder="例如：台南市永康區">
+  </div>
+  <div class="form-group">
+    <label>房間</label>
+    <input type="text" id="room" placeholder="例如：A棟301室">
+  </div>
+  <div class="form-group">
+    <label>房客姓名</label>
+    <input type="text" id="name" placeholder="例如：陳大同">
+  </div>
+  <div class="form-group">
+    <label>每月租金</label>
+    <input type="number" id="rent" placeholder="例如：12000">
+  </div>
+  <div class="form-group">
+    <label>付款日期 (每月幾號)</label>
+    <input type="number" id="pay_day" placeholder="例如：5" min="1" max="31">
+  </div>
+  <div class="form-group">
+    <label>租約開始日期</label>
+    <input type="date" id="contract_start">
+  </div>
+  <div class="form-group">
+    <label>租約結束日期</label>
+    <input type="date" id="contract_end">
+  </div>
+  <div class="form-group">
+    <label>最後付款日期 (選填)</label>
+    <input type="date" id="last_paid_date">
+  </div>
+
+  <button type="button" onclick="submitToGitHub()">🚀 確認送出</button>
+
+  <script>
+    // 初始化 Telegram Web App
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand(); // 讓網頁全螢幕展開
+
+    function submitToGitHub() {
+      // 這裡填入你的配置
+      const OWNER = "你的GitHub帳號";
+      const REPO = "你的專案倉庫名稱";
+      // 建議申請一個只允許該 Repository Dispatch 權限的 Fine-grained Token
+      const TOKEN = "你的_GITHUB_PERSONAL_ACCESS_TOKEN"; 
+
+      const payload = {
         location: document.getElementById('location').value,
         room: document.getElementById('room').value,
         name: document.getElementById('name').value,
-        rent: document.getElementById('rent').value
-        // ...其餘欄位
+        rent: document.getElementById('rent').value,
+        pay_day: document.getElementById('pay_day').value,
+        contract_start: document.getElementById('contract_start').value,
+        contract_end: document.getElementById('contract_end').value,
+        last_paid_date: document.getElementById('last_paid_date').value
+      };
+
+      if(!payload.location || !payload.room || !payload.name || !payload.rent) {
+        alert("請填寫基本必填欄位（地點、房間、姓名、租金）");
+        return;
       }
-    })
-  }).then(() => alert('資料已送出，GitHub 正在後台更新中...'));
-}
-</script>
+
+      // 呼叫 GitHub API 觸發後台 Actions 腳本
+      fetch(`https://api.github.com/repos/${OWNER}/${REPO}/dispatches`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `token ${TOKEN}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          event_type: 'add_new_tenant',
+          client_payload: payload
+        })
+      })
+      .then(response => {
+        if (response.status === 204) {
+          alert('🚀 資料已成功提交給 GitHub 排程，請待 30 秒後更新！');
+          tg.close(); // 自動關閉 Telegram 網頁彈出視窗
+        } else {
+          alert('提交失敗，請檢查 Token 設定是否正確。');
+        }
+      })
+      .catch(err => alert('發生錯誤: ' + err));
+    }
+  </script>
+</body>
+</html>
