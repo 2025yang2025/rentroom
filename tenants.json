@@ -1,0 +1,22 @@
+[
+  {
+    "location": "台北市大安區",
+    "room": "301室",
+    "name": "陳大同",
+    "rent": 15000,
+    "pay_day": 5,
+    "contract_start": "2026-01-01",
+    "contract_end": "2026-12-31",
+    "last_paid_date": "2026-06-03"
+  },
+  {
+    "location": "新北市板橋區",
+    "room": "A棟2樓",
+    "name": "林小惠",
+    "rent": 12000,
+    "pay_day": 10,
+    "contract_start": "2025-07-10",
+    "contract_end": "2026-07-09",
+    "last_paid_date": "2026-05-09"
+  }
+]
