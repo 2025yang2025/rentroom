@@ -1,0 +1,37 @@
+name: Handle Telegram or Web App Action
+
+on:
+  repository_dispatch:
+    types: [add_new_tenant, confirm_receipt] # 接收來自網頁或 Telegram 的事件
+
+jobs:
+  update-json:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Run Update Script
+      env:
+        # 接收從網頁傳過來的房客資料
+        PAYLOAD: ${{ toJson(github.event.client_payload) }}
+        EVENT_TYPE: ${{ github.event.action }}
+      run: |
+        # 用 Python 寫一段小程式：
+        # 1. 讀取 tenants.json
+        # 2. 判斷如果是 'add_new_tenant'，就把 PAYLOAD 的資料 append 進去
+        # 3. 儲存 tenants.json
+        python update_json.py
+
+    - name: Commit and Push changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add tenants.json
+        git commit -m "Automation: Updated tenant data via Telegram/Web門戶"
+        git push
