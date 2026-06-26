@@ -98,7 +98,7 @@ def send_main_menu():
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {
         "chat_id": chat_id,
-        "text": "👑 <b>房東管理主選單</b>\n請選擇您要執行的操作：",
+        "text": "👑 <b>房東管理主選單</b>\n\n歡迎使用免主機管理系統！請點擊下方按鈕新增房客：",
         "parse_mode": "HTML",
         "reply_markup": {
             "inline_keyboard": [
@@ -106,12 +106,6 @@ def send_main_menu():
                     {
                         "text": "➕ 填寫新房客資料", 
                         "web_app": {"url": "https://2025yang2025.github.io/rent-form/add.html"}
-                    }
-                ],
-                [
-                    {
-                        "text": "📊 查看所有房客狀態", 
-                        "callback_data": "view_all"
                     }
                 ]
             ]
