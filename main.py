@@ -54,7 +54,10 @@ def check_tenants_and_notify():
                 f"📅 上次付款日：<code>{t['last_paid_date'] or '無紀錄'}</code>"
             )
             # ✅ 修正：精簡 callback_data 移除中文，只留房號避免長度超標，按鈕才能成功顯示
-            buttons.append([{"text": f"🟢 確認收到 {t['name']} 租金", "callback_data": f"pay_{t['room']}"}])
+            buttons.append([{
+    "text": f"🟢 確認收到 {t['name']} 租金", 
+    "web_app": {"url": f"https://2025yang2025.github.io/rent-form/confirm.html?room={t['room']}&location={t['location']}"}
+}])
 
         # ─── 條件 C：檢查【租約到期提醒】(結束日前 30 天內) ───
         contract_end_date = datetime.strptime(t['contract_end'], '%Y-%m-%d')
