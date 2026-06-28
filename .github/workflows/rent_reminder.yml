@@ -1,10 +1,16 @@
 name: Daily Rent & Contract Reminder via Telegram
 
 on:
+  # 1. 每天台灣時間早上 08:00 自動執行
   schedule:
-    # 每天台灣時間早上 08:00 執行 (UTC 00:00)
     - cron: '0 0 * * *'
-  workflow_dispatch: # 允許你在 GitHub 網頁上手動點擊執行測試
+    
+  # 2. 允許你在 GitHub 網頁上手動點擊執行測試
+  workflow_dispatch: 
+
+  # 🌟 3. 關鍵升級：監聽從網頁傳過來的 API 訊號
+  repository_dispatch:
+    types: [add_new_tenant, confirm_receipt]
 
 jobs:
   check-and-notify:
@@ -13,6 +19,9 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
+      with:
+        # 💡 使用預設的 GITHUB_TOKEN 來處理自動 Push 權限
+        token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -23,8 +32,28 @@ jobs:
       run: |
         pip install requests
 
+    # 🌟 4. 關鍵升級：根據網頁傳過來的動作，決定要帶入什麼變數給 Python
     - name: Run script
       env:
         TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
         TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        # 把網頁傳過來的動作與資料，變成變數傳給 Python 讀取
+        EVENT_TYPE: ${{ github.event.action }}
+        CLIENT_PAYLOAD: ${{ toJson(github.event.client_payload) }}
       run: python main.py
+
+    # 🌟 5. 關鍵升級：如果 Python 有修改 tenants.json（新增或確認收租），自動幫你存檔推回倉庫
+    - name: Commit and Push changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        
+        # 檢查 tenants.json 有沒有被修改，有才執行存檔
+        if [ -n "$(git status --porcelain tenants.json)" ]; then
+          git add tenants.json
+          git commit -m "🤖 自動更新房客資料 (來自網頁操作: ${{ github.event.action }})"
+          git push
+          echo "✅ 成功將最新的 tenants.json 存檔並回推至儲存庫！"
+        else
+          echo "🎉 今日資料無變動，不需要存檔。"
+        fi
