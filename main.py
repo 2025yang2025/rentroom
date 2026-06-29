@@ -53,13 +53,13 @@ def check_tenants_and_notify():
                 f"🚨 狀態：⚠️ <b>【未收租催繳】</b>尚未登記 {current_year_month} 月的租金！\n"
                 f"📅 上次付款日：<code>{t['last_paid_date'] or '無紀錄'}</code>"
             )
-            # 💡 升級：透過 web_app 安全將房間與地點傳入確認網頁
+            # 💡 串接優化：帶入參數並精準指向你的 n8n 版收租確認網頁 (confirm.html)
             buttons.append([
-    {
-        "text": f"🟢 確認收到 {t['name']} 租金", 
-        "url": f"https://2025yang2025.github.io/rent-form/confirm.html?room={t['room']}&location={t['location']}"
-    }
-])
+                {
+                    "text": f"🟢 確認收到 {t['name']} 租金", 
+                    "url": f"https://2025yang2025.github.io/rent-form/confirm.html?room={t['room']}&location={t['location']}"
+                }
+            ])
 
         # ─── 條件 C：檢查【租約到期提醒】(結束日前 30 天內) ───
         contract_end_date = datetime.strptime(t['contract_end'], '%Y-%m-%d')
@@ -110,7 +110,8 @@ def send_main_menu():
                 [
                     {
                         "text": "➕ 填寫新房客資料 (前往網頁)", 
-                        "url": "https://2025yang2025.github.io/rent-form/confirm.html"
+                        # 💡 校正：這裡對應新增房客資料網頁 (add.html)
+                        "url": "https://2025yang2025.github.io/rent-form/add.html"
                     }
                 ]
             ]
