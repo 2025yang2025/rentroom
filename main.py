@@ -110,7 +110,7 @@ def send_main_menu():
                 [
                     {
                         "text": "➕ 填寫新房客資料 (前往網頁)", 
-                        "url": "https://2025yang2025.github.io/rent-form/add.html"
+                        "url": "https://2025yang2025.github.io/rent-form/confirm.html"
                     }
                 ]
             ]
