@@ -1,1 +1,12 @@
-[]
+[
+    {
+        "location": "中華西606",
+        "room": "301",
+        "name": "吳康菲",
+        "rent": 8500,
+        "pay_day": 1,
+        "contract_start": "2026-06-01",
+        "contract_end": "2027-05-31",
+        "last_paid_date": ""
+    }
+]
