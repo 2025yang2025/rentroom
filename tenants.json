@@ -18,5 +18,15 @@
         "contract_start": "2026-01-01",
         "contract_end": "2026-12-31",
         "last_paid_date": ""
+    },
+    {
+        "location": "中華西606",
+        "room": "402",
+        "name": "呂家宏",
+        "rent": 8000,
+        "pay_day": 1,
+        "contract_start": "2025-10-01",
+        "contract_end": "2026-09-30",
+        "last_paid_date": ""
     }
 ]
