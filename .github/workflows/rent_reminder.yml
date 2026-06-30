@@ -3,14 +3,15 @@ name: Daily Rent & Contract Reminder via Telegram
 on:
   workflow_dispatch:
   repository_dispatch:
+    types: [confirm_receipt, add_tenant]  # 🌟 規定外部只能用這兩個專屬暗號敲門
   schedule:
-    - cron: '0 1 * * *'  # 每天早上 9:00 自動檢查 (UTC 1:00) 
+    - cron: '0 1 * * *'  
   issues:
     types: [opened]
 
 jobs:
   check-and-notify:
-    # 🌟 修改這裡：如果是 n8n 觸發，或是含有 rent-action 標籤的 Issue，就允許執行！
+    # 🌟 取消舊的 issue 標籤限制，改成：只要是 n8n/網頁點擊、手動點擊、或是特定的 Issue，通通放行！
     if: |
       github.event_name == 'repository_dispatch' || 
       github.event_name == 'workflow_dispatch' || 
