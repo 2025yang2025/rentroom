@@ -108,5 +108,15 @@
         "contract_start": "2025-07-20",
         "contract_end": "2026-07-19",
         "last_paid_date": "2026-06-30"
+    },
+    {
+        "location": "中華西606",
+        "room": "101",
+        "name": "洪于珺",
+        "rent": 28000,
+        "pay_day": 1,
+        "contract_start": "2026-05-01",
+        "contract_end": "2028-04-30",
+        "last_paid_date": ""
     }
 ]
