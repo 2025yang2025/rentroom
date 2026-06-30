@@ -48,5 +48,15 @@
         "contract_start": "2026-04-15",
         "contract_end": "2027-04-14",
         "last_paid_date": ""
+    },
+    {
+        "location": "育德500",
+        "room": "102",
+        "name": "劉品岑",
+        "rent": 10000,
+        "pay_day": 15,
+        "contract_start": "2026-06-15",
+        "contract_end": "2027-06-14",
+        "last_paid_date": ""
     }
 ]
