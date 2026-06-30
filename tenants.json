@@ -88,5 +88,15 @@
         "contract_start": "2026-06-25",
         "contract_end": "2027-06-24",
         "last_paid_date": ""
+    },
+    {
+        "location": "育德500",
+        "room": "402",
+        "name": "胡馨心",
+        "rent": 9000,
+        "pay_day": 15,
+        "contract_start": "2026-06-15",
+        "contract_end": "2027-07-14",
+        "last_paid_date": ""
     }
 ]
