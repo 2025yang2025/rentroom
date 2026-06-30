@@ -38,5 +38,15 @@
         "contract_start": "2025-07-10",
         "contract_end": "2026-07-09",
         "last_paid_date": ""
+    },
+    {
+        "location": "中華西606",
+        "room": "502",
+        "name": "蔡旻芹",
+        "rent": 7000,
+        "pay_day": 15,
+        "contract_start": "2026-04-15",
+        "contract_end": "2027-04-14",
+        "last_paid_date": ""
     }
 ]
