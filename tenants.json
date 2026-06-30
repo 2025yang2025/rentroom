@@ -68,5 +68,15 @@
         "contract_start": "2026-06-10",
         "contract_end": "2026-12-31",
         "last_paid_date": ""
+    },
+    {
+        "location": "育德500",
+        "room": "302",
+        "name": "董騏豐",
+        "rent": 8500,
+        "pay_day": 15,
+        "contract_start": "2026-05-15",
+        "contract_end": "2027-05-14",
+        "last_paid_date": ""
     }
 ]
