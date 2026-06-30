@@ -180,32 +180,68 @@ def check_tenants_and_notify():
     if not has_notification:
         print("🎉 檢查完畢：今日無任何房客需要催繳或預告！")
 
-# 3. 主選單訊息（最新升級版：內建即時清單與本月財務統計）
+# 3. 主選單訊息（終極分流版：依地點個別統計財務進度）
 def send_main_menu():
     if not bot_token or not chat_id:
         print("❌ 錯誤：未偵測到環境變數，無法發送主選單。")
         return
 
-    # 📊 A. 計算本月收租財務統計
-    total_expected_rent = 0   # 預期總收入
-    total_received_rent = 0   # 已收到收入
-    paid_rooms = []           # 已繳租房間清單
-    unpaid_rooms = []         # 未繳租房間清單
+    # 📊 A. 初始化地區統計字典
+    # 結構： { "台南": { "expected": 0, "received": 0, "paid": [], "unpaid": [] } }
+    location_stats = {}
 
     for t in tenants:
+        loc = t.get('location', '未分類').strip()
         rent_amount = t.get('rent', 0)
-        total_expected_rent += rent_amount
+        room_name = t.get('room', '')
+        tenant_name = t.get('name', '')
+        
+        # 如果這個地點還沒建立過，先初始化它
+        if loc not in location_stats:
+            location_stats[loc] = {
+                "expected": 0,
+                "received": 0,
+                "paid": [],
+                "unpaid": []
+            }
+        
+        # 累加該地區的預期總收入
+        location_stats[loc]["expected"] += rent_amount
         
         # 檢查上次付款月份是否為本月
         last_paid_ym = t.get('last_paid_date', '')[:7] if t.get('last_paid_date') else ""
         
+        room_info = f"{room_name} ({tenant_name} / {rent_amount}元)"
         if last_paid_ym == current_year_month:
-            total_received_rent += rent_amount
-            paid_rooms.append(f"🟢 {t['location']}-{t['room']} ({t['name']})")
+            location_stats[loc]["received"] += rent_amount
+            location_stats[loc]["paid"].append(f"🟢 {room_info}")
         else:
-            unpaid_rooms.append(f"🔴 {t['location']}-{t['room']} ({t['name']})")
+            location_stats[loc]["unpaid"].append(f"🔴 {room_info}")
 
-    # 📋 B. 組裝所有租客的完整清單
+    # 💰 B. 依地點個別組裝財務內文
+    finance_text = f"📊 <b>【{current_year_month} 月收租分區財務報表】</b>\n"
+    
+    if location_stats:
+        for loc, stats in location_stats.items():
+            exp = stats["expected"]
+            recv = stats["received"]
+            progress = round((recv / exp) * 100 if exp > 0 else 0, 1)
+            
+            paid_summary = "\n   ".join(stats["paid"]) if stats["paid"] else "   <i>暫無</i>"
+            unpaid_summary = "\n   ".join(stats["unpaid"]) if stats["unpaid"] else "   <i>✨ 全數繳齊！</i>"
+            
+            finance_text += (
+                f"=====================\n"
+                f"📍 <b>【{loc}地區】</b>\n"
+                f"💰 實收租金：<b>{recv}</b> / {exp} 元\n"
+                f"📈 收租進度：<code>{progress}%</code>\n"
+                f"✅ <b>已收房間：</b>\n   {paid_summary}\n"
+                f"⚠️ <b>未收房間：</b>\n   {unpaid_summary}\n"
+            )
+    else:
+        finance_text += "=====================\n<i>目前暫無地區統計資料。</i>"
+
+    # 📋 C. 組裝所有租客的完整清單 (維持過往的歷史名冊摘要)
     tenant_list_text = ""
     if tenants:
         for i, t in enumerate(tenants, 1):
@@ -213,7 +249,7 @@ def send_main_menu():
             last_pay_show = f"<code>{last_pay}</code>" if last_pay else "<i>無紀錄</i>"
             tenant_list_text += (
                 f"{i}. 📍 <b>{t['location']} - {t['room']}</b>\n"
-                f"   👤 房客：{t['name']} ({t['rent']}元 / {t['pay_day']}號繳)\n"
+                f"   👤 房客：{t['name']} ({t['rent']}元)\n"
                 f"   ⏳ 租約到期：{t['contract_end']}\n"
                 f"   💰 上次收租：{last_pay_show}\n"
                 f"---------------------\n"
@@ -221,25 +257,13 @@ def send_main_menu():
     else:
         tenant_list_text = "<i>目前系統內無任何房客資料。</i>\n---------------------\n"
 
-    # 💰 C. 組裝本月實收租金內文
-    paid_summary = "\n".join(paid_rooms) if paid_rooms else "<i>暫無房間繳租</i>"
-    unpaid_summary = "\n".join(unpaid_rooms) if unpaid_rooms else "<i>✨ 全數繳齊！</i>"
-    
-    finance_text = (
-        f"📊 <b>【{current_year_month} 月收租財務進度】</b>\n"
-        f"💰 本月實收租金：<b>{total_received_rent}</b> / {total_expected_rent} 元\n"
-        f"📈 達標進度：<code>{round((total_received_rent/total_expected_rent)*100 if total_expected_rent > 0 else 0, 1)}%</code>\n\n"
-        f"✅ <b>本月已收租房間：</b>\n{paid_summary}\n\n"
-        f"⚠️ <b>本月尚未催到（或未登記）房間：</b>\n{unpaid_summary}"
-    )
-
-    # 🔗 D. 將所有資訊打包發送（發送兩則訊息，讓排版最漂亮乾淨）
-    # 訊息一：發送當月財務報表與功能選單
+    # 🔗 D. 打包發送兩則訊息
+    # 訊息一：分區財務進度與按鈕
     menu_message = (
         f"👑 <b>房東管理主選單</b>\n\n"
-        f"{finance_text}\n\n"
-        f"---------------------\n"
-        f"📋 <b>下方可展開查看完整的歷史名冊或前往網頁：</b>"
+        f"{finance_text}\n"
+        f"=====================\n"
+        f"📋 <b>下方可前往網頁操作：</b>"
     )
 
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
@@ -258,10 +282,10 @@ def send_main_menu():
             ]
         }
     }
-    print("正在發送財務報表主選單...")
+    print("正在發送分區財務報表...")
     requests.post(url, json=payload_menu)
 
-    # 訊息二：單獨發送完整名冊，方便你在手機上往上翻閱，不會跟報表擠在一起
+    # 訊息二：完整房客名冊
     list_message = (
         f"📋 <b>系統內現存【完整房客名冊】</b>\n"
         f"---------------------\n"
