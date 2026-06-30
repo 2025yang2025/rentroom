@@ -8,5 +8,15 @@
         "contract_start": "2026-06-01",
         "contract_end": "2027-05-31",
         "last_paid_date": "2026-06-30"
+    },
+    {
+        "location": "中華西606",
+        "room": "302",
+        "name": "賴嘉山",
+        "rent": 8000,
+        "pay_day": 1,
+        "contract_start": "2026-01-01",
+        "contract_end": "2026-12-31",
+        "last_paid_date": ""
     }
 ]
