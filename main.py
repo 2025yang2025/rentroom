@@ -43,22 +43,34 @@ def handle_web_dispatch():
     action_type = payload.get("action_type")
     global tenants
 
-    # ─── 分流 A：確認收到租金 ───
+    # ─── 分流 A：確認收到租金 (防呆模糊比對版) ───
     if action_type == "confirm_receipt":
-        room = payload.get("room")
-        location = payload.get("location")
+        room = str(payload.get("room", "")).strip()
+        location = str(payload.get("location", "")).strip()
         today_str = date.today().strftime("%Y-%m-%d")
         
-        print(f"▶ 執行【收租確認】: {location} - {room}")
+        print(f"▶ 執行【收租確認】: 網頁傳來 -> 地點:{location}, 房號:{room}")
+        
+        # 🧼 建立清洗函式：去除所有空白，並把「房」字拿掉，方便精準比對
+        def clean_str(s):
+            return "".join(str(s).split()).replace("房", "").lower()
+
         updated = False
         for t in tenants:
-            if t.get("room") == room and t.get("location") == location:
+            # 同時清洗資料庫與網頁傳來的字串進行比對
+            db_room = clean_str(t.get("room", ""))
+            db_loc = clean_str(t.get("location", ""))
+            web_room = clean_str(room)
+            web_loc = clean_str(location)
+            
+            if db_room == web_room and db_loc == web_loc:
                 t["last_paid_date"] = today_str
                 updated = True
-                print(f"✅ 成功將 {room} 的最後繳租日更新為 {today_str}")
+                print(f"✅ 成功模糊比對！將 [{t['location']}-{t['room']}] 的最後繳租日更新為 {today_str}")
                 break
+                
         if not updated:
-            print(f"⚠️ 找不到對應房間：{location} {room}")
+            print(f"⚠️ 找不到對應房間：網頁傳來 [{location} {room}]，系統現存清單中無法匹配。")
 
     # ─── 分流 B：新增房客資訊 ───
     elif action_type == "add_tenant":
