@@ -58,5 +58,15 @@
         "contract_start": "2026-06-15",
         "contract_end": "2027-06-14",
         "last_paid_date": ""
+    },
+    {
+        "location": "育德500",
+        "room": "301",
+        "name": "吳沛韓",
+        "rent": 10500,
+        "pay_day": 10,
+        "contract_start": "2026-06-10",
+        "contract_end": "2026-12-31",
+        "last_paid_date": ""
     }
 ]
