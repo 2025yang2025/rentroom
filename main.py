@@ -168,32 +168,59 @@ def check_tenants_and_notify():
     if not has_notification:
         print("🎉 檢查完畢：今日無任何房客需要催繳或預告！")
 
-# 3. 主選單訊息
+# 3. 主選單訊息（升級版：直接加載現有房客名冊）
 def send_main_menu():
     if not bot_token or not chat_id:
         print("❌ 錯誤：未偵測到環境變數，無法發送主選單。")
         return
 
+    # 📋 讀取並組裝現有的房客清單
+    tenant_list_text = ""
+    if tenants:
+        tenant_list_text = "📋 <b>目前已登記房客名冊：</b>\n"
+        for i, t in enumerate(tenants, 1):
+            # 檢查上次付款月份
+            last_pay = t.get('last_paid_date')
+            last_pay_show = f"<code>{last_pay}</code>" if last_pay else "<i>無紀錄</i>"
+            
+            tenant_list_text += (
+                f"---------------------\n"
+                f"{i}. 📍 <b>{t['location']} - {t['room']}</b>\n"
+                f"   👤 房客：{t['name']} ({t['rent']}元 / {t['pay_day']}號繳)\n"
+                f"   📅 租約：{t['contract_start']} ~ {t['contract_end']}\n"
+                f"   💰 上次登記：{last_pay_show}\n"
+            )
+    else:
+        tenant_list_text = "📋 <b>目前系統內無任何房客資料。</b>\n"
+
+    # 🔗 組裝發送內文
+    menu_message = (
+        f"👑 <b>房東管理主選單</b>\n\n"
+        f"{tenant_list_text}\n"
+        f"---------------------\n"
+        f"💡 歡迎使用管理系統！請點擊下方連結前往操作："
+    )
+
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {
         "chat_id": chat_id,
-        "text": "👑 <b>房東管理主選單</b>\n\n歡迎使用管理系統！請點擊下方連結前往操作：",
+        "text": menu_message,
         "parse_mode": "HTML",
         "reply_markup": {
             "inline_keyboard": [
                 [
                     {
                         "text": "➕ 填寫新房客資料 (前往網頁)", 
-                        # 💡 順手幫你校正手誤：原本錯連到 confirm.html，這邊改成正確的 add.html 囉！
                         "url": "https://2025yang2025.github.io/rent-form/add.html"
                     }
                 ]
             ]
         }
     }
-    print("正在發送主選單...")
+    print("正在發送包含房客名冊的主選單...")
     res = requests.post(url, json=payload)
-
+    print(f"主選單發送回應: {res.status_code}")
+    
 # ─── 主程式進入點 ───
 if __name__ == "__main__":
     print("🚀 開始執行房東管理系統...")
