@@ -78,5 +78,15 @@
         "contract_start": "2026-05-15",
         "contract_end": "2027-05-14",
         "last_paid_date": ""
+    },
+    {
+        "location": "育德500",
+        "room": "401",
+        "name": "陳奕淳",
+        "rent": 10500,
+        "pay_day": 25,
+        "contract_start": "2026-06-25",
+        "contract_end": "2027-06-24",
+        "last_paid_date": ""
     }
 ]
