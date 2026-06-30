@@ -3,7 +3,6 @@ name: Daily Rent & Contract Reminder via Telegram
 on:
   workflow_dispatch:
   repository_dispatch:
-    types: [confirm_receipt, add_tenant]
   schedule:
     - cron: '0 1 * * *'  # 每天早上 9:00 自動檢查 (UTC 1:00) 
   
