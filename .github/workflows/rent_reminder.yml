@@ -5,15 +5,16 @@ on:
   repository_dispatch:
   schedule:
     - cron: '0 1 * * *'  # 每天早上 9:00 自動檢查 (UTC 1:00) 
-  
-  # 🌟 改為：當有人建立含有特定標籤的 Issue 時，立刻觸發後台
   issues:
     types: [opened]
 
 jobs:
   check-and-notify:
-    # 💡 只在標籤為 rent-action 的 Issue 建立時才執行，防止別人亂玩
-    if: contains(github.event.issue.labels.*.name, 'rent-action')
+    # 🌟 修改這裡：如果是 n8n 觸發，或是含有 rent-action 標籤的 Issue，就允許執行！
+    if: |
+      github.event_name == 'repository_dispatch' || 
+      github.event_name == 'workflow_dispatch' || 
+      (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'rent-action'))
     runs-on: ubuntu-latest
 
     steps:
@@ -35,8 +36,10 @@ jobs:
       env:
         TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
         TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        # 🌟 將 Issue 的標題（裡面包含網頁傳過來的 JSON 資料）傳給 Python
+        # 🌟 如果是 Issue 觸發就帶入 Body，如果是 n8n 觸發則由 python 解析 client_payload（此處相容舊設定）
         ISSUE_BODY: ${{ github.event.issue.body }}
+        # 🌟 把 n8n 傳過來的資料袋也同步塞給環境變數，方便 Python 讀取
+        CLIENT_PAYLOAD: ${{ toJson(github.event.client_payload) }}
       run: python main.py
 
     - name: Commit and Push changes
@@ -45,12 +48,13 @@ jobs:
         git config --local user.name "GitHub Action"
         if [ -n "$(git status --porcelain tenants.json)" ]; then
           git add tenants.json
-          git commit -m "🤖 自動更新房客資料 (來自網頁 Issue 觸發)"
+          git commit -m "🤖 自動更新房客資料 (來自自動化觸發)"
           git push
         fi
 
-    # 🌟 自動把執行完的 Issue 關閉，保持後台乾淨
     - name: Close Issue
+      # 🌟 只在真的是 Issue 觸發的時候才跑關閉步驟，防止 n8n 觸發時這裡噴錯
+      if: github.event_name == 'issues'
       uses: peter-evans/close-issue@v3
       with:
         issue-number: ${{ github.event.issue.number }}
