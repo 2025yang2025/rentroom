@@ -117,7 +117,8 @@
         "pay_day": 20,
         "contract_start": "2025-07-20",
         "contract_end": "2026-07-19",
-        "last_paid_date": "2026-06-30"
+        "last_paid_date": "2026-06-30",
+        "deposit": 16000
     },
     {
         "location": "中華西606",
