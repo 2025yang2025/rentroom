@@ -129,15 +129,23 @@ def check_tenants_and_notify():
         except ValueError:
             pass
 
-        # ─── 條件 B：檢查【未收租催繳】───
+        # ─── 條件 B：檢查【當天提醒與未收租催繳】───
         last_paid_ym = t['last_paid_date'][:7] if t['last_paid_date'] else ""
-        if today.day > t['pay_day'] and last_paid_ym != current_year_month:
+        
+        # 💡 優化：只要「大於等於」繳租日，且當月還沒登記收租，就立刻提醒！
+        if today.day >= t['pay_day'] and last_paid_ym != current_year_month:
+            
+            # 分流文字：如果是當天就顯示【今日繳租提醒】，超過天數就顯示【未收租催繳】
+            status_label = "📅 <b>【今日繳租提醒】</b>" if today.day == t['pay_day'] else "🚨 ⚠️ <b>【未收租催繳】</b>"
+            
             reminders.append(
                 f"{loc_room}\n"
                 f"👤 房客：{t['name']}\n"
-                f"🚨 狀態：⚠️ <b>【未收租催繳】</b>尚未登記 {current_year_month} 月的租金！\n"
+                f"💡 狀態：{status_label} 尚未登記 {current_year_month} 月的租金！\n"
                 f"📅 上次付款日：<code>{t['last_paid_date'] or '無紀錄'}</code>"
             )
+            
+            # 串接優化：帶入參數並精準指向收租確認網頁
             buttons.append([
                 {
                     "text": f"🟢 確認收到 {t['name']} 租金", 
