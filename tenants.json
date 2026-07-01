@@ -157,5 +157,18 @@
         "contract_start": "2026-04-01",
         "contract_end": "2026-09-30",
         "last_paid_date": ""
+    },
+    {
+        "location": "中華西606",
+        "room": "201",
+        "name": "待租",
+        "rent": 0,
+        "deposit": 0,
+        "electricity": 0,
+        "electricity_history": {},
+        "pay_day": 1,
+        "contract_start": "2026-01-01",
+        "contract_end": "2026-01-01",
+        "last_paid_date": ""
     }
 ]
