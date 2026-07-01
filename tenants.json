@@ -118,5 +118,15 @@
         "contract_start": "2026-05-01",
         "contract_end": "2028-04-30",
         "last_paid_date": "2026-06-30"
+    },
+    {
+        "location": "育德500",
+        "room": "101",
+        "name": "南袁企業社",
+        "rent": 15000,
+        "pay_day": 1,
+        "contract_start": "2026-06-01",
+        "contract_end": "2027-05-30",
+        "last_paid_date": ""
     }
 ]
