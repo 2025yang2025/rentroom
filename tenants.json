@@ -119,9 +119,9 @@
         "name": "杜佳威",
         "rent": 8000,
         "pay_day": 20,
-        "contract_start": "2025-07-20",
-        "contract_end": "2026-07-19",
-        "last_paid_date": "2026-06-30",
+        "contract_start": "2026-07-20",
+        "contract_end": "2027-07-19",
+        "last_paid_date": "",
         "deposit": 16000
     },
     {
