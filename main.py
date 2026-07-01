@@ -19,7 +19,7 @@ bot_token = os.getenv('TG_BOT_TOKEN')
 chat_id = os.getenv('TG_CHAT_ID')
 
 today = datetime.today()
-current_year_month = today.strftime('%Y-%m')  # 格式如 "2026-06"
+current_year_month = today.strftime('%Y-%m')
 
 # ==========================================
 # 📥 核心功能：處理來自網頁直連的 Dispatch 訊號
@@ -62,7 +62,7 @@ def handle_web_dispatch():
         if not updated:
             print(f"⚠️ 找不到對應房間：{location} {room}")
 
-    # ─── 分流 B：新增房客資訊 ───
+    # ─── 分流 B：新增房客資訊 (含押金) ───
     elif action_type == "add_tenant":
         print("▶ 執行【新增房客資訊】")
         new_tenant = {
@@ -70,6 +70,7 @@ def handle_web_dispatch():
             "room": payload.get("room"),
             "name": payload.get("name"),
             "rent": int(payload.get("rent", 0)),
+            "deposit": int(payload.get("deposit", 0)), # 👈 讀取押金
             "pay_day": int(payload.get("pay_day", 1)),
             "contract_start": payload.get("contract_start"),
             "contract_end": payload.get("contract_end"),
@@ -77,13 +78,14 @@ def handle_web_dispatch():
         }
         tenants = [t for t in tenants if not (clean_str(t.get("room", "")) == clean_str(new_tenant["room"]) and clean_str(t.get("location", "")) == clean_str(new_tenant["location"]))]
         tenants.append(new_tenant)
-        print(f"✅ 成功將新房客 {new_tenant['name']} 寫入暫存")
+        print(f"✅ 成功將新房客 {new_tenant['name']} (押金:{new_tenant['deposit']}) 寫入暫存")
 
-    # ─── 💡 新增分流 C：辦理租客續約 ───
+    # ─── 分流 C：辦理租客續約 (含新押金修改) ───
     elif action_type == "renew_contract":
         room = str(payload.get("room", "")).strip()
         location = str(payload.get("location", "")).strip()
         new_rent = int(payload.get("rent", 0))
+        new_deposit = int(payload.get("deposit", 0)) # 👈 讀取新押金
         new_start = payload.get("contract_start")
         new_end = payload.get("contract_end")
         
@@ -92,12 +94,12 @@ def handle_web_dispatch():
         for t in tenants:
             if clean_str(t.get("room", "")) == clean_str(room) and clean_str(t.get("location", "")) == clean_str(location):
                 t["rent"] = new_rent
+                t["deposit"] = new_deposit
                 t["contract_start"] = new_start
                 t["contract_end"] = new_end
-                # 續約成功後，把最後繳租日清空，讓新合約重新計算催繳
                 t["last_paid_date"] = ""
                 updated = True
-                print(f"✅ 成功幫房客 {t['name']} 展延合約至 {new_end}，新租金 {new_rent} 元！")
+                print(f"✅ 成功幫房客 {t['name']} 展延合約，新押金 {new_deposit} 元！")
                 break
         if not updated:
             print(f"⚠️ 找不到對應房間無法續約：{location} {room}")
@@ -115,7 +117,6 @@ def handle_web_dispatch():
 # 2. 每日催繳、預告與到期檢查邏輯
 def check_tenants_and_notify():
     if not bot_token or not chat_id:
-        print("❌ 錯誤：未偵測到環境變數 TG_BOT_TOKEN 或 TG_CHAT_ID")
         return
 
     has_notification = False
@@ -125,7 +126,7 @@ def check_tenants_and_notify():
         reminders = []
         buttons = []
 
-        # ─── 條件 A：收租預告 (當月繳租日前 3 天) ───
+        # ─── 條件 A：收租預告 ───
         try:
             rent_date_this_month = datetime(today.year, today.month, t['pay_day'])
             days_to_pay = (rent_date_this_month - today).days
@@ -156,7 +157,7 @@ def check_tenants_and_notify():
                 }
             ])
 
-        # ─── 條件 C：💡 租約到期提醒 (結束日前 30 天內，並自動帶入續約按鈕) ───
+        # ─── 條件 C：租約到期提醒 ───
         try:
             contract_end_date = datetime.strptime(t['contract_end'], '%Y-%m-%d')
             days_to_contract_end = (contract_end_date - today).days
@@ -168,7 +169,6 @@ def check_tenants_and_notify():
                     f"📅 合約期間：{t['contract_start']} ~ <b>{t['contract_end']}</b>\n"
                     f"💡 提示：合約剩餘 <b>{days_to_contract_end}</b> 天，請準備連繫續約。"
                 )
-                # 🎯 自動塞入「一鍵前往續約」的直連按鈕，並貼心地帶入房號與地點參數
                 buttons.append([
                     {
                         "text": f"📝 辦理 {t['name']} 續約展延", 
@@ -178,11 +178,9 @@ def check_tenants_and_notify():
         except Exception:
             pass
 
-        # 發送訊息
         if reminders:
             has_notification = True
             message_text = "\n".join(reminders)
-            
             url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
             payload = {
                 "chat_id": chat_id,
@@ -191,14 +189,13 @@ def check_tenants_and_notify():
             }
             if buttons:
                 payload["reply_markup"] = {"inline_keyboard": buttons}
-
             requests.post(url, json=payload)
 
     if not has_notification:
         print("🎉 檢查完畢：今日無任何房客需要催繳或預告！")
 
 
-# 3. 主選單訊息 (分區財務報表)
+# 3. 主選單訊息 (分區財務報表 + 名冊內建押金顯示)
 def send_main_menu():
     if not bot_token or not chat_id:
         return
@@ -243,14 +240,18 @@ def send_main_menu():
     else:
         finance_text += "=====================\n<i>目前暫無地區統計資料。</i>"
 
+    # 📋 這裡加入了 🔒 押金: XXX 元 的特別標記
     tenant_list_text = ""
     if tenants:
         for i, t in enumerate(tenants, 1):
             last_pay = t.get('last_paid_date')
             last_pay_show = f"<code>{last_pay}</code>" if last_pay else "<i>無紀錄</i>"
+            deposit_show = f"{t.get('deposit', 0)}" # 取得押金，若無紀錄預設為 0
+            
             tenant_list_text += (
                 f"{i}. 📍 <b>{t['location']} - {t['room']}</b>\n"
-                f"   👤 房客：{t['name']} ({t['rent']}元)\n"
+                f"   👤 房客：{t['name']} ({t['rent']}元 / {t.get('pay_day', 1)}號繳)\n"
+                f"   🔒 <b>已收押金：{deposit_show} 元</b>\n" # 👈 顯示在 Telegram 清單上
                 f"   ⏳ 租約到期：{t['contract_end']}\n"
                 f"   💰 上次收租：{last_pay_show}\n"
                 f"---------------------\n"
