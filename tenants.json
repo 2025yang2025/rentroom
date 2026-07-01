@@ -8,7 +8,7 @@
         "contract_start": "2026-06-01",
         "contract_end": "2027-05-31",
         "last_paid_date": "2026-07-01",
-        "deposit": 15999,
+        "deposit": 16000,
         "electricity_history": {
             "2026-07": 0
         },
