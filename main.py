@@ -228,7 +228,7 @@ def check_tenants_and_notify():
             requests.post(url, json=payload)
 
     if not has_notification:
-        print("🎉 檢查完畢：今日無 any 房客需要催繳或預告！")
+        print("🎉 檢查完畢：今日無任何房客需要催繳或預告！")
 
 
 # 3. 主選單訊息 (分區財務報表 + 各地區獨立分組排序名冊)
@@ -243,21 +243,19 @@ def send_main_menu():
             location_stats[loc] = {
                 "total_collected_elec": 0,
                 "elec_detail_list": [],
-                "paid_raw_tenants": [],   # 💡 存放已收租的原始物件
-                "unpaid_raw_tenants": [], # 💡 存放未收租的原始物件
+                "paid_raw_tenants": [],   
+                "unpaid_raw_tenants": [], 
                 "raw_tenants_list": []
             }
         
         location_stats[loc]["raw_tenants_list"].append(t)
         
-        # 讀取電費數據
         elec_amount = t.get('electricity', 0)
         history = t.get('electricity_history', {})
         collected_elec_this_month = history.get(current_year_month, 0)
         
         last_paid_ym = t.get('last_paid_date', '')[:7] if t.get('last_paid_date') else ""
         
-        # 先不要直接組裝字串，直接把房客物件分類到已付/未付桶子中，晚點統一排序
         if last_paid_ym == current_year_month:
             location_stats[loc]["paid_raw_tenants"].append(t)
         else:
@@ -267,26 +265,24 @@ def send_main_menu():
             location_stats[loc]["total_collected_elec"] += collected_elec_this_month
             location_stats[loc]["elec_detail_list"].append((t, collected_elec_this_month))
 
-    # ─── A 區塊：分區財務報表組裝 (加入同步排序邏輯) ───
+    # ─── A 區塊：分區財務報表組裝 (已修正打字錯誤) ───
     finance_text = f"📊 <b>【{current_year_month} 月收租分區財務報表】</b>\n"
     if location_stats:
         for loc, stats in location_stats.items():
-            # 💡 對已繳、未繳、電費名細進行「依房號排序」
             sorted_paid_objs = sorted(stats["paid_raw_tenants"], key=get_room_number_key)
             sorted_unpaid_objs = sorted(stats["unpaid_raw_tenants"], key=get_room_number_key)
             sorted_elec_tuples = sorted(stats["elec_detail_list"], key=lambda x: get_room_number_key(x[0]))
             
-            # 計算應收與實收
             exp_r = sum(t.get('rent', 0) for t in stats["raw_tenants_list"])
             recv_r = sum(t.get('rent', 0) for t in stats["paid_raw_tenants"])
             progress = round((recv_r / exp_r) * 100 if exp_r > 0 else 0, 1)
             
-            # 生成排序後的文字清單
             paid_lines = []
             for t in sorted_paid_objs:
                 e_amt = t.get('electricity', 0)
                 e_str = f" + ⚡當期電費:{e_amt}元" if e_amt > 0 else ""
-                paid_lines.append(f"🟢 {t.get('room','')} ({t.get('name','') Black} / {t.get('rent',0)}元{e_str})")
+                # 💡 這裡已經把原本錯誤的 Black 字眼徹底清除了
+                paid_lines.append(f"🟢 {t.get('room','')} ({t.get('name','')} / {t.get('rent',0)}元{e_str})")
             paid_summary = "\n   ".join(paid_lines) if paid_lines else "   <i>暫無</i>"
             
             unpaid_lines = []
