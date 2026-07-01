@@ -18,7 +18,7 @@ bot_token = os.getenv('TG_BOT_TOKEN')
 chat_id = os.getenv('TG_CHAT_ID')
 
 today = datetime.today()
-current_year_month = today.strftime('%Y-%m')
+current_year_month = today.strftime('%Y-%m') # 格式如 "2026-07"
 
 # ==========================================
 # 📥 核心功能：處理來自網頁直連的 Dispatch 訊號
@@ -44,26 +44,36 @@ def handle_web_dispatch():
     def clean_str(s):
         return "".join(str(s).split()).replace("房", "").lower()
 
-    # ─── 分流 A：確認收到租金 ───
+    # ─── 分流 A：確認收到租金（含每月電費存檔） ───
     if action_type == "confirm_receipt":
         room = str(payload.get("room", "")).strip()
         location = str(payload.get("location", "")).strip()
         today_str = date.today().strftime("%Y-%m-%d")
+        this_month_key = today_str[:7] # "2026-07"
         
         print(f"▶ 執行【收租確認】: {location} - {room}")
         updated = False
         for t in tenants:
             if clean_str(t.get("room", "")) == clean_str(room) and clean_str(t.get("location", "")) == clean_str(location):
                 t["last_paid_date"] = today_str
-                # 💡 收完租後，自動將當期電費歸零，等待下次抄表
-                t["electricity"] = 0 
+                
+                # 💡 核心改動：將當月抄表電費移入歷史紀錄，記錄為該地區該月份的電費收入
+                elec_amount = t.get("electricity", 0)
+                if "electricity_history" not in t:
+                    t["electricity_history"] = {}
+                
+                # 寫入當月歷史（如果重複點擊會覆蓋，確保數據不重複計算）
+                t["electricity_history"][this_month_key] = elec_amount
+                
+                # 存檔後將當期電費歸零，等待下個月底或下個月初重新抄表
+                t["electricity" ] = 0 
                 updated = True
-                print(f"✅ 成功更新最後繳租日為 {today_str}，電費歸零。")
+                print(f"✅ 更新最後繳租日為 {today_str}，本月電費 {elec_amount} 元已歸檔並歸零。")
                 break
         if not updated:
             print(f"⚠️ 找不到對應房間：{location} {room}")
 
-    # ─── 分流 B：萬用新增 / 欄位追加修改 (含押金與電費) ───
+    # ─── 分流 B：萬用新增 / 欄位追加修改 ───
     elif action_type == "add_tenant":
         room = payload.get("room")
         location = payload.get("location")
@@ -71,7 +81,6 @@ def handle_web_dispatch():
         
         print(f"▶ 執行【房客資料異動/新增】: {location} - {room}")
         
-        # 尋找是否已經有這位房客
         existing_tenant = None
         for t in tenants:
             if clean_str(t.get("room", "")) == clean_str(room) and clean_str(t.get("location", "")) == clean_str(location):
@@ -80,7 +89,6 @@ def handle_web_dispatch():
         
         if existing_tenant:
             print(f"🔍 偵測到現存房間，啟動欄位「智能追加修改」模式...")
-            # 有傳新數值才覆蓋，若為 null 則保留原樣
             if payload.get("rent") is not None: existing_tenant["rent"] = int(payload.get("rent"))
             if payload.get("deposit") is not None: existing_tenant["deposit"] = int(payload.get("deposit"))
             if payload.get("electricity") is not None: existing_tenant["electricity"] = int(payload.get("electricity"))
@@ -98,6 +106,7 @@ def handle_web_dispatch():
                 "rent": int(payload.get("rent") or 0),
                 "deposit": int(payload.get("deposit") or 0),
                 "electricity": int(payload.get("electricity") or 0),
+                "electricity_history": {}, # 建立空的電費歷史區
                 "pay_day": int(payload.get("pay_day") or 1),
                 "contract_start": payload.get("contract_start") or "",
                 "contract_end": payload.get("contract_end") or "",
@@ -136,7 +145,7 @@ def handle_web_dispatch():
     return True
 
 
-# 2. 每日催繳、預告與到期檢查邏輯 (催繳訊息加入電費提示)
+# 2. 每日催繳、預告與到期檢查邏輯
 def check_tenants_and_notify():
     if not bot_token or not chat_id:
         return
@@ -221,7 +230,7 @@ def check_tenants_and_notify():
         print("🎉 檢查完畢：今日無任何房客需要催繳或預告！")
 
 
-# 3. 主選單訊息 (分區財務報表 + 名冊內建押金與電費)
+# 3. 主選單訊息 (分區財務報表 + 各地區每月電費獨立統計)
 def send_main_menu():
     if not bot_token or not chat_id:
         return
@@ -232,40 +241,65 @@ def send_main_menu():
         rent_amount = t.get('rent', 0)
         room_name = t.get('room', '')
         tenant_name = t.get('name', '')
+        
+        # 讀取當期網頁輸入的待繳電費
         elec_amount = t.get('electricity', 0)
         
-        if loc not in location_stats:
-            location_stats[loc] = {"expected": 0, "received": 0, "paid": [], "unpaid": []}
+        # 讀取「歷史紀錄」中屬於本月(current_year_month)已收完歸檔的電費
+        history = t.get('electricity_history', {})
+        collected_elec_this_month = history.get(current_year_month, 0)
         
-        # 預期收入 = 租金 + 該房目前未繳的電費
-        location_stats[loc]["expected"] += (rent_amount + elec_amount)
+        if loc not in location_stats:
+            location_stats[loc] = {
+                "expected_rent": 0, 
+                "received_rent": 0, 
+                "total_collected_elec": 0, # 各地區本月累計實收電費
+                "elec_detail_list": [],    # 電費明細清單
+                "paid": [], 
+                "unpaid": []
+            }
+        
+        # 租金財務統計
+        location_stats[loc]["expected_rent"] += rent_amount
         last_paid_ym = t.get('last_paid_date', '')[:7] if t.get('last_paid_date') else ""
         
-        elec_show = f" + ⚡電費:{elec_amount}元" if elec_amount > 0 else ""
+        elec_show = f" + ⚡當期電費:{elec_amount}元" if elec_amount > 0 else ""
         room_info = f"{room_name} ({tenant_name} / {rent_amount}元{elec_show})"
         
         if last_paid_ym == current_year_month:
-            location_stats[loc]["received"] += rent_amount # 已收部分（電費在確認收租時已自動結算）
+            location_stats[loc]["received_rent"] += rent_amount
             location_stats[loc]["paid"].append(f"🟢 {room_info}")
         else:
             location_stats[loc]["unpaid"].append(f"🔴 {room_info}")
+            
+        # 💡 電費獨立歷史統計：不論租金收了沒，只要本月有做過收租確認（或電費歸檔），就計入該區本月實收電費
+        if collected_elec_this_month > 0:
+            location_stats[loc]["total_collected_elec"] += collected_elec_this_month
+            location_stats[loc]["elec_detail_list"].append(f"⚡ {room_name}: {collected_elec_this_month} 元")
 
     finance_text = f"📊 <b>【{current_year_month} 月收租分區財務報表】</b>\n"
     if location_stats:
         for loc, stats in location_stats.items():
-            exp = stats["expected"]
-            recv = stats["received"]
-            progress = round((recv / exp) * 100 if exp > 0 else 0, 1)
+            exp_r = stats["expected_rent"]
+            recv_r = stats["received_rent"]
+            progress = round((recv_r / exp_r) * 100 if exp_r > 0 else 0, 1)
+            
             paid_summary = "\n   ".join(stats["paid"]) if stats["paid"] else "   <i>暫無</i>"
             unpaid_summary = "\n   ".join(stats["unpaid"]) if stats["unpaid"] else "   <i>✨ 全數繳齊！</i>"
             
+            # 組裝本地區電費明細
+            elec_total = stats["total_collected_elec"]
+            elec_summary = "\n   ".join(stats["elec_detail_list"]) if stats["elec_detail_list"] else "   <i>暫無實收電費紀錄</i>"
+            
             finance_text += (
                 f"=====================\n"
-                f"📍 <b>【{loc}地區】</b>\n"
-                f"💰 應收總計：<b>{recv}</b> / {exp} 元\n"
-                f"📈 收租進度：<code>{progress}%</code>\n"
-                f"✅ <b>已收房間：</b>\n   {paid_summary}\n"
-                f"⚠️ <b>未收房間：</b>\n   {unpaid_summary}\n"
+                f"📍 <b>【{loc}地區】財務統計</b>\n"
+                f"💰 實收租金：<b>{recv_r}</b> / {exp_r} 元\n"
+                f"📈 租金進度：<code>{progress}%</code>\n"
+                f"🔌 <b>本月實收電費總計：<u>{elec_total} 元</u></b>\n" # 👈 地區每月實收電費加總
+                f"   {elec_summary}\n\n"                       # 👈 顯示誰繳了多少
+                f"✅ <b>已收租房間：</b>\n   {paid_summary}\n"
+                f"⚠️ <b>未收租房間：</b>\n   {unpaid_summary}\n"
             )
     else:
         finance_text += "=====================\n<i>目前暫無地區統計資料。</i>"
@@ -282,7 +316,7 @@ def send_main_menu():
                 f"{i}. 📍 <b>{t['location']} - {t['room']}</b>\n"
                 f"   👤 房客：{t['name']} ({t['rent']}元 / {t.get('pay_day', 1)}號繳)\n"
                 f"   🔒 已收押金：<b>{deposit_show} 元</b>\n"
-                f"   ⚡ 當期電費：<b>{elec_current} 元</b>\n" # 👈 清單同步顯示當期電費
+                f"   🔌 待繳電費(未對帳)：<b>{elec_current} 元</b>\n"
                 f"   ⏳ 租約到期：{t['contract_end']}\n"
                 f"   💰 上次收租：{last_pay_show}\n"
                 f"---------------------\n"
@@ -301,7 +335,7 @@ def send_main_menu():
             "inline_keyboard": [[{"text": "➕ 填寫新房客資料 (前往網頁)", "url": "https://2025yang2025.github.io/rent-form/add.html"}]]
         }
     }
-    requests.post(url, payload_menu if isinstance(payload_menu, str) else json.dumps(payload_menu), headers={"Content-Type": "application/json"} if not isinstance(payload_menu, str) else None) if isinstance(payload_menu, str) or "reply_markup" in payload_menu else requests.post(url, json=payload_menu)
+    requests.post(url, json=payload_menu)
 
     list_message = f"📋 <b>系統內現存【完整房客名冊】</b>\n---------------------\n{tenant_list_text}"
     requests.post(url, json={"chat_id": chat_id, "text": list_message, "parse_mode": "HTML"})
