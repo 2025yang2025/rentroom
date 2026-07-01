@@ -144,5 +144,18 @@
         "contract_end": "2027-05-30",
         "last_paid_date": "2026-07-01",
         "deposit": 30000
+    },
+    {
+        "location": "中華西602",
+        "room": "101",
+        "name": "林淑藝",
+        "rent": 30000,
+        "deposit": 60000,
+        "electricity": 0,
+        "electricity_history": {},
+        "pay_day": 5,
+        "contract_start": "2026-04-01",
+        "contract_end": "2026-09-30",
+        "last_paid_date": ""
     }
 ]
