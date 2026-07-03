@@ -157,7 +157,7 @@ def check_tenants_and_notify():
     has_notification = False
 
     for t in tenants:
-        # ✨【全新加入的空房防線】：如果租金是 0，代表是待租空房，直接跳過不發任何通知！
+        # ✨【空房防線】：如果租金是 0，代表是待租空房，直接跳過不發任何催繳與按鈕通知！
         if int(t.get('rent') or 0) == 0:
             continue
             
@@ -168,8 +168,6 @@ def check_tenants_and_notify():
         elec_amount = t.get('electricity', 0)
         elec_text = f" + ⚡ 電費:{elec_amount}元" if elec_amount > 0 else ""
         
-        # ... 以下維持你原本的邏輯完全不動 ...
-
         try:
             rent_date_this_month = datetime(today.year, today.month, t['pay_day'])
             days_to_pay = (rent_date_this_month - today).days
@@ -271,7 +269,7 @@ def send_main_menu():
             location_stats[loc]["total_collected_elec"] += collected_elec_this_month
             location_stats[loc]["elec_detail_list"].append((t, collected_elec_this_month))
 
-    # ─── A 區塊：分區財務報表組裝 (已修正打字錯誤) ───
+    # ─── A 區塊：分區財務報表組裝 ───
     finance_text = f"📊 <b>【{current_year_month} 月收租分區財務報表】</b>\n"
     if location_stats:
         for loc, stats in location_stats.items():
@@ -287,7 +285,6 @@ def send_main_menu():
             for t in sorted_paid_objs:
                 e_amt = t.get('electricity', 0)
                 e_str = f" + ⚡當期電費:{e_amt}元" if e_amt > 0 else ""
-                # 💡 這裡已經把原本錯誤的 Black 字眼徹底清除了
                 paid_lines.append(f"🟢 {t.get('room','')} ({t.get('name','')} / {t.get('rent',0)}元{e_str})")
             paid_summary = "\n   ".join(paid_lines) if paid_lines else "   <i>暫無</i>"
             
@@ -339,7 +336,7 @@ def send_main_menu():
                 )
             tenant_list_text += "=====================\n"
     else:
-        tenant_list_text = "<i>目前系統內無任何房客資料。</i>\n=====================\n"
+        tenant_list_text = "<i>目系統內無任何房客資料。</i>\n=====================\n"
 
     # ─── C 區塊：發送 Telegram 訊息 ───
     menu_message = f"👑 <b>房東管理主選單</b>\n\n{finance_text}\n=====================\n📋 <b>下方可前往網頁操作：</b>"
@@ -362,9 +359,12 @@ def send_main_menu():
 if __name__ == "__main__":
     print("🚀 開始執行房東管理系統...")
     is_web_signal = handle_web_dispatch()
+    
     if not is_web_signal:
         print("⏰ 偵測到定時排程，開始執行每日房客狀態檢查...")
         check_tenants_and_notify()
         send_main_menu()
     else:
-        print("🏁 網頁資料處理完畢，已成功跳過排程通知並更新選單。")
+        # ✨【修正重點】：當網頁前台有更新時，除了寫入 json，也要同步將最新的選單報表打上 Telegram
+        print("🏁 網頁資料處理完畢，已跳過每日催繳通知，正在更新 Telegram 主選單...")
+        send_main_menu()
