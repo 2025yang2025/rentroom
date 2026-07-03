@@ -157,12 +157,18 @@ def check_tenants_and_notify():
     has_notification = False
 
     for t in tenants:
+        # ✨【全新加入的空房防線】：如果租金是 0，代表是待租空房，直接跳過不發任何通知！
+        if int(t.get('rent') or 0) == 0:
+            continue
+            
         loc_room = f"📍 <b>[{t['location']} - {t['room']}]</b>"
         reminders = []
         buttons = []
         
         elec_amount = t.get('electricity', 0)
         elec_text = f" + ⚡ 電費:{elec_amount}元" if elec_amount > 0 else ""
+        
+        # ... 以下維持你原本的邏輯完全不動 ...
 
         try:
             rent_date_this_month = datetime(today.year, today.month, t['pay_day'])
