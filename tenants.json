@@ -132,7 +132,11 @@
         "pay_day": 1,
         "contract_start": "2026-05-01",
         "contract_end": "2028-04-30",
-        "last_paid_date": "2026-06-30"
+        "last_paid_date": "2026-07-05",
+        "electricity_history": {
+            "2026-07": 0
+        },
+        "electricity": 0
     },
     {
         "location": "育德500",
