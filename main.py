@@ -149,7 +149,7 @@ def handle_web_dispatch():
     return True
 
 
-# 2. 每日催繳、預告與到期檢查邏輯
+# 2. 每日催繳與到期檢查邏輯
 def check_tenants_and_notify():
     if not bot_token or not chat_id:
         print("⚠️ 找不到 Telegram Token 或 Chat ID，跳過通知檢查。")
@@ -159,12 +159,11 @@ def check_tenants_and_notify():
     vacant_rooms = []  # 收集待租空房的清單
 
     for t in tenants:
-        # 🧾【分流點】：如果是租金 0 或名字叫待租的空房，加入空房清單並跳過催繳流程
+        # 🧾【待租房隔離】：如果是空房，直接加入空房清單並跳過所有催繳/通知流程
         if int(t.get('rent') or 0) == 0 or t.get('name') == "待租":
             vacant_rooms.append(t)
             continue
             
-        # 🛡️ 幫每個房客加上獨立錯誤隔離罩，防止單一房客資料異常影響整體發送
         try:
             loc_room = f"📍 <b>[{t['location']} - {t['room']}]</b>"
             reminders = []
@@ -172,25 +171,10 @@ def check_tenants_and_notify():
             
             elec_amount = t.get('electricity', 0)
             elec_text = f" + ⚡ 電費:{elec_amount}元" if elec_amount > 0 else ""
-            
-            # ─ 1. 檢查 3 天前預告 ─
-            try:
-                rent_date_this_month = datetime(today.year, today.month, t['pay_day'])
-                days_to_pay = (rent_date_this_month - today).days
-                if days_to_pay == 3:
-                    reminders.append(
-                        f"{loc_room}\n"
-                        f"👤 房客：{t['name']}\n"
-                        f"💰 應繳：租金 <code>{t['rent']}</code> 元{elec_text}\n"
-                        f"📅 狀態：<b>【收租預告】</b>將於 3 天後 ({t['pay_day']} 號) 到期"
-                    )
-            except ValueError:
-                pass
 
-            # ─ 2. 改進：當天提醒與未繳持續催繳（直到繳租完成） ─
+            # ─ 1. 當天提醒與未繳持續催繳（已移除3天前預告） ─
             last_paid_ym = t.get('last_paid_date', '')[:7] if t.get('last_paid_date') else ""
             if today.day >= t['pay_day'] and last_paid_ym != current_year_month:
-                # 當天就顯示今日繳租提醒，超過天數就一直顯示未收租催繳
                 status_label = "📅 <b>【今日繳租提醒】</b>" if today.day == t['pay_day'] else "🚨 ⚠️ <b>【未收租催繳】</b>"
                 reminders.append(
                     f"{loc_room}\n"
@@ -206,7 +190,7 @@ def check_tenants_and_notify():
                     }
                 ])
 
-            # ─ 3. 檢查租約到期 ─
+            # ─ 2. 檢查租約到期 ─
             try:
                 if t.get('contract_end'):
                     contract_end_date = datetime.strptime(t['contract_end'], '%Y-%m-%d')
@@ -228,7 +212,7 @@ def check_tenants_and_notify():
             except Exception:
                 pass
 
-            # ─ 4. 如果有任何需要通知的事項，立即發送 ─
+            # ─ 3. 發送單一房客通知 ─
             if reminders:
                 has_notification = True
                 message_text = "\n".join(reminders)
@@ -250,13 +234,12 @@ def check_tenants_and_notify():
         except Exception as room_error:
             print(f"💥 處理房間 [{t.get('location')}-{t.get('room')}] 時發生非預期錯誤: {room_error}")
 
-    # ─── 額外加碼：獨立發送待租空房訊息 ───
+    # ─── 獨立發送待租空房訊息 ───
     if vacant_rooms:
-        # 依地區和房號對空房進行排序，看起來更整齊
         sorted_vacant = sorted(vacant_rooms, key=lambda x: (x.get('location', ''), get_room_number_key(x)))
         vacant_lines = [f"🚪 <b>{v.get('location')} - {v.get('room')}</b> (目前待租中)" for v in sorted_vacant]
         
-        vacant_message = "物件招租廣播 🔍\n\n" + "\n".join(vacant_lines) + "\n\n💡 記得定時更新各大租屋平台的廣告喔！"
+        vacant_message = "🔍 <b>【物件招租廣播】</b>\n\n" + "\n".join(vacant_lines) + "\n\n💡 記得定時更新各大租屋平台的廣告喔！"
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
         
         res = requests.post(url, json={"chat_id": chat_id, "text": vacant_message, "parse_mode": "HTML"})
@@ -264,16 +247,20 @@ def check_tenants_and_notify():
             print("📢 已成功發送待租空房名單至 Telegram！")
 
     if not has_notification:
-        print("🎉 檢查完畢：今日無任何房客需要催繳或預告！")
+        print("🎉 檢查完畢：今日無任何房客需要催繳！")
 
 
-# 3. 主選單訊息 (分區財務報表 + 各地區獨立分組排序名冊)
+# 3. 主選單訊息 (不加入待租房)
 def send_main_menu():
     if not bot_token or not chat_id:
         return
 
     location_stats = {}
     for t in tenants:
+        # ✨【過濾核心】：如果是待租空房，完全不進入財務統計與房客名冊
+        if int(t.get('rent') or 0) == 0 or t.get('name') == "待租":
+            continue
+
         loc = t.get('location', '未分類').strip()
         if loc not in location_stats:
             location_stats[loc] = {
@@ -342,9 +329,9 @@ def send_main_menu():
                 f"⚠️ <b>未收租房間 (依房號排序)：</b>\n   {unpaid_summary}\n"
             )
     else:
-        finance_text += "=====================\n<i>目前暫無地區統計資料。</i>"
+        finance_text += "=====================\n<i>目前暫無實質房客財務資料。</i>"
 
-    # ─── B 區塊：完整名冊排序 ───
+    # ─── B 區塊：完整名冊排序 (已排除空房) ───
     tenant_list_text = ""
     if location_stats:
         for loc, stats in location_stats.items():
@@ -368,7 +355,7 @@ def send_main_menu():
                 )
             tenant_list_text += "=====================\n"
     else:
-        tenant_list_text = "<i>目系統內無任何房客資料。</i>\n=====================\n"
+        tenant_list_text = "<i>目前系統內無任何有效房客資料。</i>\n=====================\n"
 
     # ─── C 區塊：發送 Telegram 訊息 ───
     menu_message = f"👑 <b>房東管理主選單</b>\n\n{finance_text}\n=====================\n📋 <b>下方可前往網頁操作：</b>"
@@ -384,7 +371,7 @@ def send_main_menu():
     }
     requests.post(url, json=payload_menu)
 
-    list_message = f"📋 <b>系統內現存【分區排序房客名冊】</b>\n=====================\n{tenant_list_text}"
+    list_message = f"📋 <b>系統內現存【分區排序房客名冊】</b>\n(已自動隱藏待租空房)\n=====================\n{tenant_list_text}"
     requests.post(url, json={"chat_id": chat_id, "text": list_message, "parse_mode": "HTML"})
 
 
