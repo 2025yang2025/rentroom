@@ -152,84 +152,101 @@ def handle_web_dispatch():
 # 2. 每日催繳、預告與到期檢查邏輯
 def check_tenants_and_notify():
     if not bot_token or not chat_id:
+        print("⚠️ 找不到 Telegram Token 或 Chat ID，跳過通知檢查。")
         return
 
     has_notification = False
 
     for t in tenants:
-        # ✨【空房防線】：如果租金是 0，代表是待租空房，直接跳過不發任何催繳與按鈕通知！
+        # ✨【空房防線】：如果租金是 0，代表是待租空房，直接跳過
         if int(t.get('rent') or 0) == 0:
             continue
             
-        loc_room = f"📍 <b>[{t['location']} - {t['room']}]</b>"
-        reminders = []
-        buttons = []
-        
-        elec_amount = t.get('electricity', 0)
-        elec_text = f" + ⚡ 電費:{elec_amount}元" if elec_amount > 0 else ""
-        
+        # 🛡️ 幫每個房客加上獨立錯誤隔離罩，防止單一房客資料異常導致後面的人（如林淑藝）被斷頭
         try:
-            rent_date_this_month = datetime(today.year, today.month, t['pay_day'])
-            days_to_pay = (rent_date_this_month - today).days
-            if days_to_pay == 3:
+            loc_room = f"📍 <b>[{t['location']} - {t['room']}]</b>"
+            reminders = []
+            buttons = []
+            
+            elec_amount = t.get('electricity', 0)
+            elec_text = f" + ⚡ 電費:{elec_amount}元" if elec_amount > 0 else ""
+            
+            # ─ 1. 檢查 3 天前預告 ─
+            try:
+                rent_date_this_month = datetime(today.year, today.month, t['pay_day'])
+                days_to_pay = (rent_date_this_month - today).days
+                if days_to_pay == 3:
+                    reminders.append(
+                        f"{loc_room}\n"
+                        f"👤 房客：{t['name']}\n"
+                        f"💰 應繳：租金 <code>{t['rent']}</code> 元{elec_text}\n"
+                        f"📅 狀態：<b>【收租預告】</b>將於 3 天後 ({t['pay_day']} 號) 到期"
+                    )
+            except ValueError:
+                pass
+
+            # ─ 2. 檢查當天提醒與未繳催繳 ─
+            last_paid_ym = t.get('last_paid_date', '')[:7] if t.get('last_paid_date') else ""
+            if today.day >= t['pay_day'] and last_paid_ym != current_year_month:
+                status_label = "📅 <b>【今日繳租提醒】</b>" if today.day == t['pay_day'] else "🚨 ⚠️ <b>【未收租催繳】</b>"
                 reminders.append(
                     f"{loc_room}\n"
                     f"👤 房客：{t['name']}\n"
-                    f"💰 應繳：租金 <code>{t['rent']}</code> 元{elec_text}\n"
-                    f"📅 狀態：<b>【收租預告】</b>將於 3 天後 ({t['pay_day']} 號) 到期"
-                )
-        except ValueError:
-            pass
-
-        last_paid_ym = t['last_paid_date'][:7] if t['last_paid_date'] else ""
-        if today.day >= t['pay_day'] and last_paid_ym != current_year_month:
-            status_label = "📅 <b>【今日繳租提醒】</b>" if today.day == t['pay_day'] else "🚨 ⚠️ <b>【未收租催繳】</b>"
-            reminders.append(
-                f"{loc_room}\n"
-                f"👤 房客：{t['name']}\n"
-                f"💡 狀態：{status_label} 尚未登記 {current_year_month} 月款項！\n"
-                f"💰 應繳金額：租金 {t['rent']} 元{elec_text}\n"
-                f"📅 上次付款日：<code>{t['last_paid_date'] or '無紀錄'}</code>"
-            )
-            buttons.append([
-                {
-                    "text": f"🟢 確認收到 {t['name']} 租金" + (f"(含電費)" if elec_amount > 0 else ""), 
-                    "url": f"https://2025yang2025.github.io/rent-form/confirm.html?room={t['room']}&location={t['location']}"
-                }
-            ])
-
-        try:
-            contract_end_date = datetime.strptime(t['contract_end'], '%Y-%m-%d')
-            days_to_contract_end = (contract_end_date - today).days
-            if 0 <= days_to_contract_end <= 30:
-                reminders.append(
-                    f"{loc_room}\n"
-                    f"👤 房客：{t['name']}\n"
-                    f"📝 狀態：⏳ <b>【租約即將到期】</b>\n"
-                    f"📅 合約期間：{t['contract_start']} ~ <b>{t['contract_end']}</b>\n"
-                    f"💡 提示：合約剩餘 <b>{days_to_contract_end}</b> 天，請準備連繫續約。"
+                    f"💡 狀態：{status_label} 尚未登記 {current_year_month} 月款項！\n"
+                    f"💰 應繳金額：租金 {t['rent']} 元{elec_text}\n"
+                    f"📅 上次付款日：<code>{t.get('last_paid_date') or '無紀錄'}</code>"
                 )
                 buttons.append([
                     {
-                        "text": f"📝 辦理 {t['name']} 續約展延", 
-                        "url": f"https://2025yang2025.github.io/rent-form/renew.html?room={t['room']}&location={t['location']}"
+                        "text": f"🟢 確認收到 {t['name']} 租金" + (f"(含電費)" if elec_amount > 0 else ""), 
+                        "url": f"https://2025yang2025.github.io/rent-form/confirm.html?room={t['room']}&location={t['location']}"
                     }
                 ])
-        except Exception:
-            pass
 
-        if reminders:
-            has_notification = True
-            message_text = "\n".join(reminders)
-            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-            payload = {
-                "chat_id": chat_id,
-                "text": message_text,
-                "parse_mode": "HTML"
-            }
-            if buttons:
-                payload["reply_markup"] = {"inline_keyboard": buttons}
-            requests.post(url, json=payload)
+            # ─ 3. 檢查租約到期 ─
+            try:
+                if t.get('contract_end'):
+                    contract_end_date = datetime.strptime(t['contract_end'], '%Y-%m-%d')
+                    days_to_contract_end = (contract_end_date - today).days
+                    if 0 <= days_to_contract_end <= 30:
+                        reminders.append(
+                            f"{loc_room}\n"
+                            f"👤 房客：{t['name']}\n"
+                            f"📝 狀態：⏳ <b>【租約即將到期】</b>\n"
+                            f"📅 合約期間：{t['contract_start']} ~ <b>{t['contract_end']}</b>\n"
+                            f"💡 提示：合約剩餘 <b>{days_to_contract_end}</b> 天，請準備連繫續約。"
+                        )
+                        buttons.append([
+                            {
+                                "text": f"📝 辦理 {t['name']} 續約展延", 
+                                "url": f"https://2025yang2025.github.io/rent-form/renew.html?room={t['room']}&location={t['location']}"
+                            }
+                        ])
+            except Exception:
+                pass
+
+            # ─ 4. 如果有任何需要通知的事項，立即發送 ─
+            if reminders:
+                has_notification = True
+                message_text = "\n".join(reminders)
+                url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+                payload = {
+                    "chat_id": chat_id,
+                    "text": message_text,
+                    "parse_mode": "HTML"
+                }
+                if buttons:
+                    payload["reply_markup"] = {"inline_keyboard": buttons}
+                
+                # 發送並檢查 API 回傳狀態
+                res = requests.post(url, json=payload)
+                if res.status_code != 200:
+                    print(f"❌ Telegram 發送失敗 [{t.get('location')}-{t.get('room')}]: {res.text}")
+                else:
+                    print(f"🔔 已成功發送 [{t.get('location')}-{t.get('room')}] 的通知至 Telegram。")
+
+        except Exception as room_error:
+            print(f"💥 處理房間 [{t.get('location')}-{t.get('room')}] 時發生非預期錯誤: {room_error}")
 
     if not has_notification:
         print("🎉 檢查完畢：今日無任何房客需要催繳或預告！")
