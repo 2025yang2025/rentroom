@@ -156,11 +156,13 @@
         "rent": 30000,
         "deposit": 60000,
         "electricity": 0,
-        "electricity_history": {},
+        "electricity_history": {
+            "2026-07": 0
+        },
         "pay_day": 5,
         "contract_start": "2026-04-01",
         "contract_end": "2026-09-30",
-        "last_paid_date": ""
+        "last_paid_date": "2026-07-06"
     },
     {
         "location": "中華西606",
