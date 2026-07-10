@@ -149,7 +149,8 @@
         "contract_start": "2026-06-01",
         "contract_end": "2027-05-30",
         "last_paid_date": "2026-07-01",
-        "deposit": 30000
+        "deposit": 30000,
+        "electricity": 1560
     },
     {
         "location": "中華西602",
