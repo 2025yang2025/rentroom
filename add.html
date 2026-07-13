@@ -15,7 +15,6 @@
         .form-label { font-weight: bold; margin-bottom: 5px; }
         .highlight-group { background-color: #f0f4f8; padding: 15px; border-radius: 10px; border: 1px solid #d0e2ff; }
         .electricity-badge { background-color: #fff3cd; color: #856404; padding: 5px 10px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; border: 1px solid #ffeeba; }
-        .debug-panel { background-color: #fff0f0; border: 1px dashed #ffc1c1; border-radius: 8px; padding: 10px; font-family: monospace; font-size: 0.85rem; }
     </style>
 </head>
 <body>
@@ -28,15 +27,6 @@
 </nav>
 
 <div class="container py-2" style="max-width: 600px;">
-
-    <!-- 🔍 網址參數即時偵測面板 (輔助肉眼檢查) -->
-    <div class="card p-3 mb-3 debug-panel">
-        <div class="fw-bold text-danger mb-1">🔍 網址參數即時偵測面板：</div>
-        <div id="debugAction">• 網址問號參數抓到：偵測中...</div>
-        <div id="debugHash">• 網址井字錨點(#)抓到：偵測中...</div>
-        <div id="debugUrl" style="word-break: break-all;">• 完整網址：偵測中...</div>
-        <div id="debugResult" class="mt-2 fw-bold text-primary">• 最終判定結果：偵測中...</div>
-    </div>
 
     <!-- 🔒 GitHub API 連線配置 (預設隱藏) -->
     <div id="configSection" class="card p-3 mb-4 config-panel">
@@ -105,7 +95,7 @@
 
             <div class="mb-3">
                 <label class="form-label">🔒 押金總額（追加/修改在此填新總額）</label>
-                <input type="number" class="form-control" id="deposit" placeholder="例如：16000">
+                <input type="number" class="form-control" id="deposit" placeholder="example: 16000">
             </div>
 
             <div class="row">
@@ -119,7 +109,7 @@
                 </div>
             </div>
 
-            <!-- 🛠️ 底部並列雙按鈕 -->
+            <!-- 🛠️ 底部暴力強制並列雙按鈕 -->
             <div class="row g-2 mt-3" style="display: flex !important; visibility: visible !important;">
                 <div class="col-6">
                     <button type="button" class="btn btn-primary w-100 py-3 fw-bold fs-5 shadow-sm" id="submitBtn" onclick="submitTenantData()">
@@ -138,24 +128,26 @@
 </div>
 
 <script>
+    // 暴力自製網址參數解析器（防止因為網址多個問號或串接錯誤導致失效）
+    function getQueryParam(paramName) {
+        const url = window.location.href;
+        const regex = new RegExp('[?&]' + paramName + '=([^&#]*)', 'i');
+        const results = regex.exec(url);
+        return results ? decodeURIComponent(results[1]) : null;
+    }
+
     document.addEventListener("DOMContentLoaded", function() {
         if(localStorage.getItem("git_user")) document.getElementById("gitUser").value = localStorage.getItem("git_user");
         if(localStorage.getItem("git_repo")) document.getElementById("gitRepo").value = localStorage.getItem("git_repo");
         if(localStorage.getItem("git_token")) document.getElementById("gitToken").value = localStorage.getItem("git_token");
 
-        // 解析常規問號參數
-        const urlParams = new URLSearchParams(window.location.search);
-        const tab = urlParams.get('tab');
-        const action = urlParams.get('action');
-        const pRoom = urlParams.get('room');
-        const pLocation = urlParams.get('location');
-        const pName = urlParams.get('name');
-        const pRent = urlParams.get('rent');
-        const pPayDay = urlParams.get('pay_day');
+        // 使用超強防禦解析器獲取參數
+        const pLocation = getQueryParam('location');
+        const pRoom = getQueryParam('room');
+        const pName = getQueryParam('name');
+        const pRent = getQueryParam('rent');
+        const pPayDay = getQueryParam('pay_day');
         
-        // 解析井字號 (#) 錨點參數 (防禦 GitHub Pages 參數被洗掉)
-        const urlHash = window.location.hash.replace('#', '').trim();
-
         if (pLocation) document.getElementById("location").value = pLocation;
         if (pRoom) document.getElementById("room").value = pRoom;
         if (pName) document.getElementById("name").value = pName;
@@ -165,46 +157,37 @@
         updateDynamicTitle();
         updateElectricityDisplay();
 
-        // ─── 偵錯面板數據填入 ───
-        document.getElementById("debugAction").innerText = `• 網址問號參數：action=${action || '無'}, tab=${tab || '無'}`;
-        document.getElementById("debugHash").innerText = `• 網址井字錨點(#)：【${urlHash || '無'}】`;
-        document.getElementById("debugUrl").innerText = `• 完整網址：${window.location.href}`;
-
-        // ─── 智慧雙軌分流判定 ───
+        // ─── 超級暴力網址字串直接掃描判定 ───
         const submitBtn = document.getElementById("submitBtn");
         const btnAdvance = document.getElementById("btnAdvance");
+        const fullUrlLower = window.location.href.toLowerCase();
         
-        const actLower = (action || "").toLowerCase();
-        const tabLower = (tab || "").toLowerCase();
-        const hashLower = urlHash.toLowerCase();
-        const fullUrl = window.location.href.toLowerCase();
-        
-        // 判定是否為正常收租
-        const isConfirm = (actLower === 'confirm' || tabLower === 'confirm' || hashLower === 'confirm' || fullUrl.includes('confirm'));
-        // 判定是否為提前繳租
-        const isAdvance = (actLower === 'advance' || tabLower === 'advance' || hashLower === 'advance' || fullUrl.includes('advance'));
+        // 只要網址裡面有包含這幾個關鍵字，直接強制判定，絕不依賴瀏覽器 URLSearchParams
+        const isConfirm = fullUrlLower.includes('confirm');
+        const isAdvance = fullUrlLower.includes('advance');
         
         if (submitBtn && btnAdvance) {
             if (isConfirm) {
-                document.getElementById("debugResult").innerText = `• 最終判定結果：切換至【🟢 正常收租】模式`;
+                // 正常收租狀態
                 submitBtn.className = "btn btn-success w-100 py-3 fw-bold fs-5 shadow-sm";
                 submitBtn.innerHTML = "🟢 確認正常收租";
                 submitBtn.setAttribute("onclick", "submitNormalReceipt()");
                 btnAdvance.className = "btn btn-secondary w-100 py-3 fw-bold opacity-50"; 
             } else if (isAdvance) {
-                document.getElementById("debugResult").innerText = `• 最終判定結果：切換至【⏩ 提前繳租】模式`;
+                // 提前繳租狀態
                 submitBtn.className = "btn btn-secondary w-100 py-3 fw-bold opacity-50";
                 submitBtn.innerHTML = "💡 目前為提前繳租";
                 submitBtn.setAttribute("onclick", "Swal.fire('提示', '目前為提前繳租模式，請點擊右邊黃色按鈕送出！', 'info')");
                 btnAdvance.className = "btn btn-warning w-100 py-3 fw-bold fs-5 shadow-sm text-dark";
                 
+                // 自動聚焦到電費
                 const inputElectricity = document.getElementById("electricity");
                 if (inputElectricity) {
                     inputElectricity.focus();
                     inputElectricity.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
             } else {
-                document.getElementById("debugResult").innerText = `• 最終判定結果：無匹配參數，預設【🚀 儲存變更】模式`;
+                // 預設純修改資料狀態
                 submitBtn.className = "btn btn-primary w-100 py-3 fw-bold fs-5 shadow-sm";
                 submitBtn.innerHTML = "🚀 儲存變更並同步";
                 submitBtn.setAttribute("onclick", "submitTenantData()");
