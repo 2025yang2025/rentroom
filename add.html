@@ -151,13 +151,22 @@
         updateDynamicTitle();
         updateElectricityDisplay();
 
-        // 智慧分流調整（僅改變外觀與綁定事件，不隱藏按鈕）
+        // 智慧分流調整（引導視覺，防止手誤）
         const submitBtn = document.getElementById("submitBtn");
+        const btnAdvance = document.getElementById("btnAdvance");
+        
         if (action === 'confirm') {
             submitBtn.className = "btn btn-success w-100 py-3 fw-bold";
             submitBtn.innerHTML = "🟢 確認正常收租";
             submitBtn.setAttribute("onclick", "submitNormalReceipt()");
+            // 正常收租時，提前繳租按鈕變淡
+            btnAdvance.className = "btn btn-secondary w-100 py-3 fw-bold opacity-50"; 
         } else if (action === 'advance' || tab === 'advance') {
+            // 提前繳租時，正常收租按鈕變淡並提醒
+            submitBtn.className = "btn btn-secondary w-100 py-3 fw-bold opacity-50";
+            submitBtn.innerHTML = "💡 目前為提前繳租模式";
+            submitBtn.setAttribute("onclick", "Swal.fire('提示', '目前為提前繳租模式，請點擊右邊黃色按鈕送出！', 'info')");
+            
             const inputElectricity = document.getElementById("electricity");
             if (inputElectricity) {
                 inputElectricity.focus();
