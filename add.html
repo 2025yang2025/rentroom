@@ -11,16 +11,18 @@
         body { background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         .container { max-width: 500px; }
         .card { border: none; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
-        .highlight-group { background-color: #f0f7ff; padding: 16px; border-radius: 14px; border: 1px solid #e0effe; }
+        .highlight-group { background-color: #f0f7ff; padding: 16px; border-radius: 14px; border: 1px solid #e0effe; transition: all 0.3s; }
         .form-label { font-weight: 600; color: #334155; margin-bottom: 6px; font-size: 0.95rem; }
         .form-control { border-radius: 10px; padding: 10px 14px; border: 1px solid #cbd5e1; }
         .form-control:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
         .btn-custom { border-radius: 12px; padding: 12px; font-weight: 600; font-size: 1rem; transition: all 0.2s; }
         
-        /* 頁籤專用樣式 */
-        .nav-pills .nav-link { border-radius: 10px; font-weight: 600; padding: 8px 16px; color: #64748b; }
-        .nav-pills .nav-link.active.bg-success { background-color: #10b981 !important; color: white; }
-        .nav-pills .nav-link.active.bg-warning { background-color: #f59e0b !important; color: #1e293b; }
+        /* 模式切換按鈕區 */
+        .mode-container { background-color: #f1f5f9; padding: 6px; border-radius: 12px; display: flex; gap: 6px; }
+        .mode-btn { flex: 1; border: none; background: none; padding: 8px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; color: #64748b; transition: all 0.2s; }
+        .mode-btn.active-normal { background-color: #10b981; color: white; }
+        .mode-btn.active-advance { background-color: #f59e0b; color: #1e293b; }
+        
         .bg-advance-mode { background-color: #fffbeb; border: 1px solid #fef3c7; }
         .config-panel { background-color: #f1f5f9; border-radius: 12px; display: none; }
     </style>
@@ -29,7 +31,7 @@
 
 <div class="container py-4">
 
-    <!-- 🔒 GitHub API 連線配置 (點擊齒輪或未設定時顯示) -->
+    <!-- 🔒 GitHub API 連線配置 -->
     <div class="d-flex justify-content-end mb-2">
         <button class="btn btn-link btn-sm text-secondary text-decoration-none" onclick="toggleConfig()">⚙️ 連線設定</button>
     </div>
@@ -50,15 +52,11 @@
     <!-- 主卡片區域 -->
     <div class="card p-4">
         
-        <!-- 頂部功能分流頁籤 -->
-        <ul class="nav nav-pills nav-fill gap-2 p-1 bg-light rounded-3 mb-4" id="modeTabs" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active bg-success" id="normal-tab" data-bs-toggle="tab" type="button" onclick="switchMode('normal')">🟢 當期正常收租 / 修改</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="advance-tab" data-bs-toggle="tab" type="button" onclick="switchMode('advance')">⏩ 房客提前繳租</button>
-            </li>
-        </ul>
+        <!-- 頂部功能模式切換區 -->
+        <div class="mode-container mb-4">
+            <button type="button" id="btnTabNormal" class="mode-btn active-normal" onclick="switchMode('normal')">🟢 當期正常收租</button>
+            <button type="button" id="btnTabAdvance" class="mode-btn" onclick="switchMode('advance')">⏩ 房客提前繳租</button>
+        </div>
 
         <div id="dynamicTitle" class="alert alert-info text-center fw-bold d-none mb-3" style="font-size: 1rem; border-radius: 10px;"></div>
 
@@ -82,8 +80,8 @@
                 </div>
             </div>
 
-            <!-- 💰 租金費用欄位（正常模式顯示固定租金，提前繳租模式變成輸入實收金額） -->
-            <div class="mb-3 p-3 rounded d-none bg-advance-mode" id="advanceRentArea">
+            <!-- 💰 租金區塊 -->
+            <div class="mb-3 d-none p-3 rounded" id="advanceRentArea" style="background-color: #fffbeb; border: 1px solid #fef3c7;">
                 <label class="form-label text-danger fw-bold">💰 本次【提前繳租】實收租金金額</label>
                 <input type="number" class="form-control border-warning" id="advanceRentInput" placeholder="請輸入房客本次繳納的租金">
             </div>
@@ -118,7 +116,7 @@
                 <input type="date" class="form-control" id="contract_end">
             </div>
 
-            <!-- 🛠️ 按鈕觸發區 (自動切換) -->
+            <!-- 🛠️ 按鈕送出區 -->
             <div id="normalAction">
                 <button type="button" class="btn btn-primary btn-custom w-100 shadow-sm mb-2 text-white" id="btnNormal" onclick="submitNormalReceipt()">
                     🚀 登記當期收租並同步至系統
@@ -137,9 +135,6 @@
         </form>
     </div>
 </div>
-
-<!-- 引入 Bootstrap 5 JS -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
     let globalTenantsData = [];
@@ -160,15 +155,9 @@
         if (getQueryParam('location')) document.getElementById("location").value = getQueryParam('location');
         if (getQueryParam('room')) document.getElementById("room").value = getQueryParam('room');
         
-        // 處理 Telegram 按鈕傳進來的 tab 參數的分流
         const tabParam = getQueryParam('tab');
         if (tabParam === 'advance' || getQueryParam('action') === 'advance') {
-            const advTab = document.getElementById('advance-tab');
-            if (advTab) {
-                advTab.classList.add('active', 'bg-warning');
-                document.getElementById('normal-tab').classList.remove('active', 'bg-success');
-                switchMode('advance');
-            }
+            switchMode('advance');
         }
 
         fetchLatestTenantsJSON();
@@ -176,16 +165,16 @@
 
     function switchMode(mode) {
         currentMode = mode;
-        const normalTab = document.getElementById("normal-tab");
-        const advTab = document.getElementById("advance-tab");
+        const btnNormal = document.getElementById("btnTabNormal");
+        const btnAdvance = document.getElementById("btnTabAdvance");
         const coreGroup = document.getElementById("coreGroup");
         const elecLabel = document.getElementById("elecLabel");
         
         if (mode === 'advance') {
-            normalTab.classList.remove('active', 'bg-success');
-            advTab.classList.add('active', 'bg-warning');
+            btnNormal.className = "mode-btn";
+            btnAdvance.className = "mode-btn active-advance";
             
-            document.getElementById("advanceRentArea").document.getElementById ? "" : document.getElementById("advanceRentArea").classList.remove("d-none");
+            document.getElementById("advanceRentArea").classList.remove("d-none");
             document.getElementById("normalRentArea").classList.add("d-none");
             document.getElementById("advanceAction").classList.remove("d-none");
             document.getElementById("normalAction").classList.add("d-none");
@@ -195,8 +184,8 @@
             const currentRent = document.getElementById("rent").value;
             if(currentRent) document.getElementById("advanceRentInput").value = currentRent;
         } else {
-            advTab.classList.remove('active', 'bg-warning');
-            normalTab.classList.add('active', 'bg-success');
+            btnNormal.className = "mode-btn active-normal";
+            btnAdvance.className = "mode-btn";
             
             document.getElementById("advanceRentArea").classList.add("d-none");
             document.getElementById("normalRentArea").classList.remove("d-none");
