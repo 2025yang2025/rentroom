@@ -265,7 +265,7 @@ def send_main_menu():
     # ✨ 集中在主選單下方的管理鍵（點擊即可前往你的記帳/管理網頁）
     main_menu_buttons = [
         [
-            {"text": "🔗 前往房東收租/記帳網頁", "url": "https://2025yang2025.github.io/rent-form/"}
+            {"text": "🔗 前往房東收租/記帳網頁", "url": "https://2025yang2025.github.io/rent-form/add.html"}
         ]
     ]
 
