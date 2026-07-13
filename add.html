@@ -48,7 +48,7 @@
         <h4 class="text-center fw-bold mb-2">➕ 房客資料管理</h4>
         <p class="text-center text-muted small mb-4">💡 若要追加押金或更新電費，只需填寫地點、房號、姓名與欲修改的欄位即可！</p>
         
-        <!-- 頂部即時動態標題：例如 502 (杜佳威 / 8000元 / 繳租日: 10號) -->
+        <!-- 頂部即時動態標題 -->
         <div id="dynamicTitle" class="alert alert-info text-center fw-bold d-none" style="font-size: 1.1rem;">
             <!-- 由 JavaScript 動態填入 -->
         </div>
@@ -109,15 +109,15 @@
                 </div>
             </div>
 
-            <!-- 🛠️ 底部暴力強制並列雙按鈕（移除所有會阻礙顯示的判斷，確保 100% 露臉） -->
+            <!-- 🛠️ 底部暴力強制並列雙按鈕 -->
             <div class="row g-2 mt-3" style="display: flex !important; visibility: visible !important;">
                 <div class="col-6">
-                    <button type="button" class="btn btn-primary w-100 py-3 fw-bold" id="submitBtn" onclick="submitTenantData()">
+                    <button type="button" class="btn btn-primary w-100 py-3 fw-bold fs-5 shadow-sm" id="submitBtn" onclick="submitTenantData()">
                         🚀 儲存變更並同步
                     </button>
                 </div>
                 <div class="col-6">
-                    <button type="button" class="btn btn-warning w-100 py-3 fw-bold text-dark" id="btnAdvance" onclick="submitAdvanceReceipt()">
+                    <button type="button" class="btn btn-warning w-100 py-3 fw-bold fs-5 shadow-sm text-dark" id="btnAdvance" onclick="submitAdvanceReceipt()">
                         ⏩ 確認提前繳租
                     </button>
                 </div>
@@ -151,26 +151,42 @@
         updateDynamicTitle();
         updateElectricityDisplay();
 
-        // 智慧分流調整（引導視覺，防止手誤）
+        // ─── 智慧分流調整（安全判定防禦版） ───
         const submitBtn = document.getElementById("submitBtn");
         const btnAdvance = document.getElementById("btnAdvance");
         
-        if (action === 'confirm') {
-            submitBtn.className = "btn btn-success w-100 py-3 fw-bold";
-            submitBtn.innerHTML = "🟢 確認正常收租";
-            submitBtn.setAttribute("onclick", "submitNormalReceipt()");
-            // 正常收租時，提前繳租按鈕變淡
-            btnAdvance.className = "btn btn-secondary w-100 py-3 fw-bold opacity-50"; 
-        } else if (action === 'advance' || tab === 'advance') {
-            // 提前繳租時，正常收租按鈕變淡並提醒
-            submitBtn.className = "btn btn-secondary w-100 py-3 fw-bold opacity-50";
-            submitBtn.innerHTML = "💡 目前為提前繳租模式";
-            submitBtn.setAttribute("onclick", "Swal.fire('提示', '目前為提前繳租模式，請點擊右邊黃色按鈕送出！', 'info')");
-            
-            const inputElectricity = document.getElementById("electricity");
-            if (inputElectricity) {
-                inputElectricity.focus();
-                inputElectricity.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const isConfirm = (action === 'confirm' || tab === 'confirm');
+        const isAdvance = (action === 'advance' || tab === 'advance');
+        
+        if (submitBtn && btnAdvance) {
+            if (isConfirm) {
+                // 正常收租狀態：高亮正常收租，淡化提前繳租
+                submitBtn.className = "btn btn-success w-100 py-3 fw-bold fs-5 shadow-sm";
+                submitBtn.innerHTML = "🟢 確認正常收租";
+                submitBtn.setAttribute("onclick", "submitNormalReceipt()");
+                
+                btnAdvance.className = "btn btn-secondary w-100 py-3 fw-bold opacity-50"; 
+            } else if (isAdvance) {
+                // 提前繳租狀態：淡化正常收租並提示，高亮提前繳租
+                submitBtn.className = "btn btn-secondary w-100 py-3 fw-bold opacity-50";
+                submitBtn.innerHTML = "💡 目前為提前繳租";
+                submitBtn.setAttribute("onclick", "Swal.fire('提示', '目前為提前繳租模式，請點擊右邊黃色按鈕送出！', 'info')");
+                
+                btnAdvance.className = "btn btn-warning w-100 py-3 fw-bold fs-5 shadow-sm text-dark";
+                
+                // 自動聚焦到電費輸入框
+                const inputElectricity = document.getElementById("electricity");
+                if (inputElectricity) {
+                    inputElectricity.focus();
+                    inputElectricity.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            } else {
+                // 預設純修改資料狀態
+                submitBtn.className = "btn btn-primary w-100 py-3 fw-bold fs-5 shadow-sm";
+                submitBtn.innerHTML = "🚀 儲存變更並同步";
+                submitBtn.setAttribute("onclick", "submitTenantData()");
+                
+                btnAdvance.className = "btn btn-warning w-100 py-3 fw-bold fs-5 shadow-sm text-dark";
             }
         }
     });
