@@ -59,18 +59,23 @@ def handle_web_dispatch():
         today_str = date.today().strftime("%Y-%m-%d")
         this_month_key = today_str[:7]
         
+        # 💡 優化點：如果網頁傳進來的 payload 有帶最新電費，優先採用網頁的；否則採用原本 JSON 的
+        web_elec = payload.get("electricity")
+        
         print(f"▶ 執行【收租確認】: {location} - {room}")
         updated = False
         for t in tenants:
             if clean_str(t.get("room", "")) == clean_str(room) and clean_str(t.get("location", "")) == clean_str(location):
                 t["last_paid_date"] = today_str
                 
-                elec_amount = t.get("electricity", 0)
+                # 確定本月最終要歸檔的電費金額
+                elec_amount = int(web_elec) if web_elec is not None else t.get('electricity', 0)
+                
                 if "electricity_history" not in t:
                     t["electricity_history"] = {}
                 
                 t["electricity_history"][this_month_key] = elec_amount
-                t["electricity"] = 0 
+                t["electricity"] = 0 # 收齊後，待繳電費歸零
                 updated = True
                 print(f"✅ 更新最後繳租日為 {today_str}，本月電費 {elec_amount} 元已歸檔並歸零。")
                 break
@@ -149,7 +154,9 @@ def handle_web_dispatch():
     return True
 
 
-# 2. 每日催繳與到期檢查邏輯
+# ==========================================
+# ⏰ 每日催繳與到期檢查邏輯 (定時排程觸發)
+# ==========================================
 def check_tenants_and_notify():
     if not bot_token or not chat_id:
         print("⚠️ 找不到 Telegram Token 或 Chat ID，跳過通知檢查。")
@@ -250,7 +257,9 @@ def check_tenants_and_notify():
         print("🎉 檢查完畢：今日無任何房客需要催繳！")
 
 
-# 3. 主選單訊息 (不加入待租房)
+# ==========================================
+# 📊 報表功能：發送主選單與財務總表
+# ==========================================
 def send_main_menu():
     if not bot_token or not chat_id:
         return
