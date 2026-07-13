@@ -1,179 +1,229 @@
-import os
-import json
-from datetime import date, datetime, timedelta
-import requests
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>房東管理系統 - 資料異動與收租確認</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f4f7f6; font-family: 'Helvetica Neue', Arial, sans-serif; }
+        .card { border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .btn-primary { background-color: #007bff; border: none; }
+        .btn-success { background-color: #28a745; border: none; }
+        .btn-highlight { animation: pulse 2s infinite; border: 3px solid #fff !important; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
+        .section-title { border-left: 5px solid #007bff; padding-left: 10px; margin-bottom: 20px; font-weight: bold; color: #333; }
+        .section-title.receipt { border-left-color: #28a745; }
+    </style>
+</head>
+<body>
 
-# ─── 基礎路徑與環境變數設定 ───
-json_path = "tenants.json"
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+<div class="container py-4" style="max-width: 600px;">
+    <h2 class="text-center mb-4 fw-bold text-secondary">👑 房東智慧管理後台</h2>
 
-# 載入資料庫
-if os.path.exists(json_path):
-    with open(json_path, 'r', encoding='utf-8') as f:
-        tenants = json.load(f)
-else:
-    tenants = []
-
-# ─── 核心功能：處理來自網頁直連的 Dispatch 訊號 ───
-def handle_web_dispatch():
-    event_name = os.getenv("GITHUB_EVENT_NAME", "")
-    client_payload_str = os.getenv("CLIENT_PAYLOAD", "{}")
-    
-    if event_name != "repository_dispatch":
-        return False 
-
-    print("📥 偵測到來自網頁的直連訊號 (repository_dispatch)")
-    
-    try:
-        payload = json.loads(client_payload_str)
-    except Exception as e:
-        print(f"❌ 解析網頁 Payload 失敗: {e}")
-        return True
-
-    action_type = payload.get("action_type")
-    global tenants
-
-    def clean_str(s):
-        return "".join(str(s).split()).replace("房", "").lower()
-
-    # ─── 分流 A：確認收租（不論正常或提前，皆精確紀錄「今天」為實際繳租日） ───
-    if action_type in ["confirm_receipt", "advance_receipt"]:
-        room = str(payload.get("room", "")).strip()
-        location = str(payload.get("location", "")).strip()
-        elec_amount = int(payload.get("electricity") or 0)
+    <!-- ================= 🟢 快速確認收租與提前繳租區塊 ================= -->
+    <div class="card p-4 mb-4" id="receiptCard">
+        <h4 class="section-title receipt">⚡ 快速確認收租 / 提前繳租登記</h4>
+        <p class="text-muted small">請輸入地區、房號及當期收到的電費。如果是提早繳租，系統會自動記錄今天為繳付日，並在本月繳租日到期時判定已繳清。</p>
         
-        # 統一使用【點擊按鈕的今天】作為實際收租紀錄日（例如：7月5日提前繳就記7月5日）
-        record_date = date.today()
-        today_str = record_date.strftime("%Y-%m-%d") 
-        this_month_key = today_str[:7] # 取得當前年月標記，例如 "2026-07"
-        
-        print(f"▶ 執行收租登記: {location} - {room} (實際收到日期: {today_str})")
-        
-        updated = False
-        for t in tenants:
-            if clean_str(t.get("room", "")) == clean_str(room) and clean_str(t.get("location", "")) == clean_str(location):
-                # 1. 寫入精確的繳租日期（如：2026-07-05）
-                t["last_paid_date"] = today_str
-                
-                # 2. 將網頁輸入的當期電費存入該月的歷史紀錄中
-                if "electricity_history" not in t:
-                    t["electricity_history"] = {}
-                
-                t["electricity_history"][this_month_key] = elec_amount
-                t["electricity"] = 0  # 歸檔後將當期未繳電費歸零
-                updated = True
-                print(f"✅ 更新最後繳租日為 {today_str}，本月電費 {elec_amount} 元已歸檔。")
-                break
+        <form id="receiptForm">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label fw-bold">📍 選擇租屋地區</label>
+                    <select class="form-select" id="receiptLocation" required>
+                        <option value="" disabled selected>請選擇地區...</option>
+                        <option value="永康">永康</option>
+                        <option value="東區">東區</option>
+                        <option value="安平">安平</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label fw-bold">🚪 輸入房號</label>
+                    <input type="text" class="form-control" id="receiptRoom" placeholder="例如：101" required>
+                </div>
+            </div>
 
-    # ─── 分流 B：萬用基本資料新增 / 欄位修改 ───
-    elif action_type == "add_tenant":
-        room = payload.get("room")
-        location = payload.get("location")
-        name = payload.get("name")
+            <!-- 電費輸入欄位 -->
+            <div class="mb-3">
+                <label class="form-label fw-bold">⚡ 本期收到的電費 (元)</label>
+                <input type="number" class="form-control" id="receiptElectricity" value="0" min="0" required>
+                <div class="form-text text-muted">若本次未收到電費或已內含，請維持 0。</div>
+            </div>
+
+            <!-- 功能分流按鈕 -->
+            <div class="row g-2">
+                <div class="col-6">
+                    <button type="button" class="btn btn-success w-100 py-2 fw-bold" id="btnNormal" onclick="submitReceipt('confirm_receipt')">
+                        🟢 正常收本月租金
+                    </button>
+                </div>
+                <div class="col-6">
+                    <button type="button" class="btn btn-success w-100 py-2 fw-bold" id="btnAdvance" style="background-color: #20c997;" onclick="submitReceipt('advance_receipt')">
+                        ⏩ 確認提前繳租
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- ================= 🔵 原有區塊：房客基本資料維護 ================= -->
+    <div class="card p-4">
+        <h4 class="section-title">📝 房客基本資料新增 / 修改</h4>
+        <p class="text-muted small">此區塊僅用於調整基本合約與基本資料。欲登記每月收租與電費請用上方綠色區塊。</p>
         
-        print(f"▶ 執行【房客資料異動/新增】: {location} - {room}")
-        existing_tenant = None
-        for t in tenants:
-            if clean_str(t.get("room", "")) == clean_str(room) and clean_str(t.get("location", "")) == clean_str(location):
-                existing_tenant = t
-                break
-        
-        if existing_tenant:
-            if payload.get("rent") is not None: existing_tenant["rent"] = int(payload.get("rent"))
-            if payload.get("pay_day") is not None: existing_tenant["pay_day"] = int(payload.get("pay_day"))
-            if payload.get("contract_start") is not None: existing_tenant["contract_start"] = payload.get("contract_start")
-            if payload.get("contract_end") is not None: existing_tenant["contract_end"] = payload.get("contract_end")
-            if name: existing_tenant["name"] = name
-            print(f"✅ 房間 [{location}-{room}] 資料修訂完成！")
-        else:
-            new_tenant = {
-                "location": location, "room": room, "name": name,
-                "rent": int(payload.get("rent") or 0), "electricity": 0, "electricity_history": {},
-                "pay_day": int(payload.get("pay_day") or 10), "contract_start": payload.get("contract_start") or "",
-                "contract_end": payload.get("contract_end") or "", "last_paid_date": ""
-            }
-            tenants.append(new_tenant)
-            print(f"✅ 全新房客 {name} 登記成功！")
+        <form id="tenantForm">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">📍 地區</label>
+                    <select class="form-select" id="location" required>
+                        <option value="永康">永康</option>
+                        <option value="東區">東區</option>
+                        <option value="安平">安平</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">🚪 房號</label>
+                    <input type="text" class="form-control" id="room" placeholder="例如: 102" required>
+                </div>
+            </div>
 
-    else:
-        print(f"⚠️ 未知的網頁動作: {action_type}")
-        return True
+            <div class="mb-3">
+                <label class="form-label">👤 房客姓名</label>
+                <input type="text" class="form-control" id="name" placeholder="例如: 林淑藝" required>
+            </div>
 
-    # 儲存回資料庫
-    with open(json_path, 'w', encoding='utf-8') as f:
-        json.dump(tenants, f, ensure_ascii=False, indent=4)
-    print("💾 資料庫 tenants.json 更新完成！")
-    return True
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">💰 每月租金</label>
+                    <input type="number" class="form-control" id="rent" placeholder="例如: 6500" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">📅 每月繳租日（幾號）</label>
+                    <input type="number" class="form-control" id="pay_day" min="1" max="31" placeholder="例如: 10" required>
+                </div>
+            </div>
 
-# ─── 核心功能：發送 Telegram 整合主選單與帳務報告 ───
-def send_main_menu():
-    today = date.today()
-    current_month_str = today.strftime("%Y-%m") # 當前年份與月份（例如: "2026-07"）
-    
-    unpaid_list = []
-    paid_list = []
-    
-    # 🌟 重新設計的已繳/未繳篩選邏輯
-    for t in tenants:
-        last_paid = t.get("last_paid_date", "")
-        pay_day = int(t.get("pay_day", 10))
-        
-        # 核心判斷：只要最後繳租日包含當前月份的字串，就視為本月已提早或按時繳過！
-        if last_paid and current_month_str in last_paid:
-            paid_list.append(t)
-        else:
-            # 如果不是這個月繳的，且「今天日期已經到了或過了應繳日」，或者跨月了，都放入未繳名單
-            if today.day >= pay_day or (last_paid and last_paid[:7] < current_month_str):
-                unpaid_list.append(t)
-            else:
-                # 還沒到繳租日，暫不催繳，但仍屬於本月待繳
-                unpaid_list.append(t)
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">📅 合約開始日</label>
+                    <input type="date" class="form-control" id="contract_start">
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">📅 合約結束日</label>
+                    <input type="date" class="form-control" id="contract_end">
+                </div>
+            </div>
 
-    # 建立 Telegram 報告文本
-    msg = f"👑 **房東智慧收租管理主選單**\n"
-    msg += f"📅 統計月份：{today.strftime('%Y年%m月')}\n"
-    msg += f"───────────────────\n\n"
-    
-    msg += f"🔴 **【本月待繳 / 未完成名單】**\n"
-    if not unpaid_list:
-        msg += " 暫無未繳房客，全部收齊囉！🎉\n"
-    else:
-        for t in unpaid_list:
-            msg += f" 📍 {t['location']}-{t['room']} {t['name']} (每月{t['pay_day']}日) - 💰 租金: {t['rent']}\n"
+            <button type="submit" class="btn btn-primary w-100 py-2 fw-bold" id="submitBtn">
+                💾 儲存 / 修改房客資料
+            </button>
+        </form>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+    const GITHUB_USER = "2025yang2025"; 
+    const REPO_NAME = "rent-form";
+
+    // 🌟 網頁載入時自動解析 Telegram 帶過來的房間參數
+    window.onload = function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const loc = urlParams.get('loc');
+        const room = urlParams.get('room');
+        const action = urlParams.get('action'); // normal 或 advance
+
+        if (loc && room) {
+            // 自動幫房東選好並填好
+            document.getElementById('receiptLocation').value = loc;
+            document.getElementById('receiptRoom').value = room;
             
-    msg += f"\n🟢 **【本月已收租房間】**\n"
-    if not paid_list:
-        msg += " 今日尚無已繳資料。\n"
-    else:
-        for t in paid_list:
-            msg += f" ✅ {t['location']}-{t['room']} {t['name']} (已於 {t['last_paid_date']} 勾記完成)\n"
-
-    # ✨ 集中在主選單底部的單一網頁入口（精確指定你的 add.html 網頁）
-    main_menu_buttons = [
-        [
-            {"text": "🔗 開啟智慧記帳/確認收租網頁 (add.html)", "url": "https://2025yang2025.github.io/rent-form/add.html"}
-        ]
-    ]
-
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": msg,
-        "parse_mode": "Markdown",
-        "reply_markup": {"inline_keyboard": main_menu_buttons}
+            // 根據點選的按鈕，自動放大提示該按鈕
+            if (action === 'normal') {
+                document.getElementById('btnNormal').classList.add('btn-highlight', 'btn-lg');
+            } else if (action === 'advance') {
+                document.getElementById('btnAdvance').classList.add('btn-highlight', 'btn-lg');
+            }
+            
+            // 畫面震動微調提示
+            document.getElementById('receiptCard').scrollIntoView({ behavior: 'smooth' });
+        }
     }
-    
-    url = f"https://api.telegram.com/bot{BOT_TOKEN}/sendMessage"
-    res = requests.post(url, json=payload)
-    if res.ok:
-        print("🚀 Telegram 整合主選單發送成功！")
-    else:
-        print(f"❌ Telegram 發送失敗: {res.text}")
 
-# ─── 執行主程序 ───
-if __name__ == "__main__":
-    # 如果是網頁發送過來的動作，優先處理資料庫
-    is_dispatch = handle_web_dispatch()
-    
-    # 處理完畢或例行排程，發送最新的 Telegram 主選單報告
-    send_main_menu()
+    function dispatchToGitHub(payloadData, buttonEl, successMsg) {
+        const originalText = buttonEl.innerHTML;
+        buttonEl.disabled = true;
+        buttonEl.innerHTML = `<span class="spinner-border spinner-border-sm"></span>...`;
+
+        const otherBtn = buttonEl.id === "btnNormal" ? document.getElementById("btnAdvance") : document.getElementById("btnNormal");
+        if (otherBtn) otherBtn.disabled = true;
+
+        fetch(`https://api.github.com/repos/${GITHUB_USER}/${REPO_NAME}/dispatches`, {
+            method: "POST",
+            headers: {
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28"
+            },
+            body: JSON.stringify({
+                event_type: "webhook_event",
+                client_payload: payloadData
+            })
+        })
+        .then(response => {
+            Swal.fire({ icon: 'success', title: '指令已送出！', text: successMsg + ' 後台將使用排程與 Secret 自動處理，請於 1 分鐘後查看 Telegram。', confirmButtonColor: '#28a745' });
+        })
+        .catch(err => {
+            Swal.fire({ icon: 'error', title: '連線錯誤', text: err.message });
+        })
+        .finally(() => {
+            buttonEl.disabled = false;
+            buttonEl.innerHTML = originalText;
+            if (otherBtn) otherBtn.disabled = false;
+        });
+    }
+
+    function submitReceipt(actionType) {
+        const loc = document.getElementById("receiptLocation").value;
+        const rm = document.getElementById("receiptRoom").value.trim();
+        const elec = document.getElementById("receiptElectricity").value;
+        
+        if (!loc || !rm) {
+            Swal.fire({ icon: 'warning', title: '欄位未完整', text: '請先選擇地區並填寫房號！' });
+            return;
+        }
+
+        const btn = actionType === "confirm_receipt" ? document.getElementById("btnNormal") : document.getElementById("btnAdvance");
+        const typeText = actionType === "confirm_receipt" ? "【正常收本月租金】" : "【確認提前繳租】";
+
+        const data = {
+            action_type: actionType,
+            location: loc,
+            room: rm,
+            electricity: parseInt(elec) || 0
+        };
+
+        dispatchToGitHub(data, btn, `${typeText} 訊號已發送！房間：${loc}-${rm}，電費金額：${elec} 元。`);
+    }
+
+    document.getElementById("tenantForm").addEventListener("submit", function(e) {
+        e.preventDefault();
+        const btn = document.getElementById("submitBtn");
+
+        const data = {
+            action_type: "add_tenant",
+            location: document.getElementById("location").value,
+            room: document.getElementById("room").value.trim(),
+            name: document.getElementById("name").value.trim(),
+            rent: document.getElementById("rent").value,
+            pay_day: document.getElementById("pay_day").value,
+            contract_start: document.getElementById("contract_start").value,
+            contract_end: document.getElementById("contract_end").value
+        };
+
+        dispatchToGitHub(data, btn, `【${data.location} - ${data.room} ${data.name}】資料變更訊號已送出！`);
+    });
+</script>
+
+</body>
+</html>
