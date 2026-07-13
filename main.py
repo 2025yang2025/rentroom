@@ -122,12 +122,12 @@ def send_main_menu():
         else:
             unpaid_list.append(t)
 
-    # 建立 Telegram 報告文本
-    msg = f"👑 **房東智慧收租管理主選單**\n"
+    # 建立 Telegram 報告文本 (全面換成 HTML 語法)
+    msg = f"<b>👑 房東智慧收租管理主選單</b>\n"
     msg += f"📅 統計月份：{today.strftime('%Y年%m月')}\n"
     msg += f"───────────────────\n\n"
     
-    msg += f"🔴 **【本月待繳 / 未完成名單】**\n"
+    msg += f"🔴 <b>【本月待繳 / 未完成名單】</b>\n"
     
     inline_keyboard = []
 
@@ -147,7 +147,7 @@ def send_main_menu():
                 {"text": f"⏩ 提前繳租 ({t['location']}-{t['room']})", "url": f"{base_url}&action=advance"}
             ])
             
-    msg += f"\n🟢 **【本月已收租房間】**\n"
+    msg += f"\n🟢 <b>【本月已收租房間】</b>\n"
     if not paid_list:
         msg += " 今日尚無已繳資料。\n"
     else:
@@ -165,7 +165,7 @@ def send_main_menu():
     payload = {
         "chat_id": CHAT_ID,
         "text": msg,
-        "parse_mode": "Markdown",
+        "parse_mode": "HTML",  # 切換為極度穩定的 HTML 解析模式
         "reply_markup": {"inline_keyboard": inline_keyboard}
     }
     
