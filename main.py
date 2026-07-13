@@ -159,8 +159,10 @@ def check_tenants_and_notify():
             elec_amount = t.get('electricity', 0)
             elec_text = f" + ⚡ 電費:{elec_amount}元" if elec_amount > 0 else ""
 
+            # 💡 檢查「最後繳租日」的年月份
             last_paid_ym = t.get('last_paid_date', '')[:7] if t.get('last_paid_date') else ""
             
+            # 如果今天日期大於等於房客的繳租日，且「這個月還沒繳過租金」才觸發提醒
             if today.day >= t['pay_day'] and last_paid_ym != current_year_month:
                 status_label = "📅 <b>【今日繳租提醒】</b>" if today.day == t['pay_day'] else "🚨 ⚠️ <b>【未收租催繳】</b>"
                 reminders.append(
@@ -170,11 +172,16 @@ def check_tenants_and_notify():
                     f"💰 應繳金額：租金 {t['rent']} 元{elec_text}\n"
                     f"📅 上次付款日：<code>{t.get('last_paid_date') or '無紀錄'}</code>"
                 )
-                # 💡 這裡同步修正：當日催繳通知的按鈕也改導向至 add.html
+                
+                # 催繳通知附帶雙功能按鈕，並傳遞該房客的參數直連 add.html
                 buttons.append([
                     {
-                        "text": f"🟢 確認收到 {t['name']} 租金", 
-                        "url": f"https://2025yang2025.github.io/rent-form/add.html?action=confirm&room={t['room']}&location={t['location']}"
+                        "text": f"🟢 正常收租 ({t['name']})", 
+                        "url": f"https://2025yang2025.github.io/rent-form/add.html?tab=advance&action=confirm&room={t['room']}&location={t['location']}"
+                    },
+                    {
+                        "text": f"⏩ 提前繳租 ({t['name']})", 
+                        "url": f"https://2025yang2025.github.io/rent-form/add.html?tab=advance&action=advance&room={t['room']}&location={t['location']}"
                     }
                 ])
 
@@ -261,7 +268,7 @@ def send_main_menu():
                 f"⚠️ <b>未收租房間：</b>\n   {unpaid_summary}\n"
             )
 
-    # ─── 📊 修正為直連 add.html 的雙按鈕選單 ───
+    # ─── 📊 總表下方的常駐主功能雙按鈕（直連對應至 add.html） ───
     inline_buttons = [
         [
             {"text": "➕ 填寫新房客資料", "url": "https://2025yang2025.github.io/rent-form/add.html?tab=tenant"},
