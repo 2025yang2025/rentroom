@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>房東管理系統 - 資料異動與收租確認</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         body { background-color: #f4f7f6; font-family: 'Helvetica Neue', Arial, sans-serif; }
         .card { border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
@@ -26,7 +27,7 @@
 
 <div class="container py-2" style="max-width: 600px;">
 
-    <!-- 🔑 GitHub 帳號資訊設定區塊 (不寫死安全機制) -->
+    <!-- 🔑 GitHub 帳號資訊設定區塊 -->
     <div id="configSection" class="card p-3 mb-4 config-panel">
         <h6 class="fw-bold text-secondary mb-2">🔒 GitHub API 連線配置</h6>
         <div class="row g-2">
@@ -44,21 +45,22 @@
     <!-- ================= 🟢 快速確認收租與提前繳租區塊 ================= -->
     <div class="card p-4 mb-4" id="receiptCard">
         <h4 class="section-title receipt">⚡ 快速確認收租 / 提前繳租登記</h4>
-        <p class="text-muted small">請輸入地區、房號及當期收到的電費。如果是提早繳租，系統會自動記錄今天為繳付日，並在本月繳租日到期時判定已繳清。</p>
+        <p class="text-muted small">系統會自動根據按鈕帶入房客資訊。如果是提前繳租，系統會自動記錄今天為繳付日，並在本月繳租日到期時判定已繳清。</p>
         
         <form id="receiptForm">
             <div class="row">
                 <div class="col-md-6 mb-3">
-                    <label class="form-label fw-bold">📍 選擇租屋地區</label>
+                    <label class="form-label fw-bold">📍 租屋地區</label>
                     <select class="form-select" id="receiptLocation" required>
                         <option value="" disabled selected>請選擇地區...</option>
                         <option value="永康">永康</option>
                         <option value="東區">東區</option>
                         <option value="安平">安平</option>
+                        <option value="中華西602">中華西602</option> <!-- 補上你截圖中的地區範例 -->
                     </select>
                 </div>
                 <div class="col-md-6 mb-3">
-                    <label class="form-label fw-bold">🚪 輸入房號</label>
+                    <label class="form-label fw-bold">🚪 房號</label>
                     <input type="text" class="form-control" id="receiptRoom" placeholder="例如：101" required>
                 </div>
             </div>
@@ -87,7 +89,7 @@
     <!-- ================= 🔵 房客基本資料維護 ================= -->
     <div class="card p-4" id="tenantCard">
         <h4 class="section-title">📝 房客基本資料新增 / 修改</h4>
-        <p class="text-muted small">此區塊僅用於調整基本合約與基本資料。欲登記每月收租與電費請用上方綠色區塊。</p>
+        <p class="text-muted small">此區塊僅用於調整基本合約資料。</p>
         
         <form id="tenantForm">
             <div class="row">
@@ -97,6 +99,7 @@
                         <option value="永康">永康</option>
                         <option value="東區">東區</option>
                         <option value="安平">安平</option>
+                        <option value="中華西602">中華西602</option>
                     </select>
                 </div>
                 <div class="col-md-6 mb-3">
@@ -139,25 +142,44 @@
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
 <script>
-    // 智慧型自動路由引導
+    // 💡 智慧型自動路由與資料填入機制
     document.addEventListener("DOMContentLoaded", function() {
         if(localStorage.getItem("git_user")) document.getElementById("gitUser").value = localStorage.getItem("git_user");
         if(localStorage.getItem("git_repo")) document.getElementById("gitRepo").value = localStorage.getItem("git_repo");
         if(localStorage.getItem("git_token")) document.getElementById("gitToken").value = localStorage.getItem("git_token");
 
-        // 解析 URL 參數切換聚焦位置
+        // 解析 URL 參數
         const urlParams = new URLSearchParams(window.location.search);
         const tab = urlParams.get('tab');
+        const pRoom = urlParams.get('room');
+        const pLocation = urlParams.get('location');
         
+        // 核心自動填入邏輯：如果網址有帶房間資訊，不論在哪個頁籤都幫房東填好
+        if (pLocation) {
+            const rLoc = document.getElementById("receiptLocation");
+            const tLoc = document.getElementById("location");
+            if(rLoc) rLoc.value = pLocation;
+            if(tLoc) tLoc.value = pLocation;
+        }
+        if (pRoom) {
+            const rRoom = document.getElementById("receiptRoom");
+            const tRoom = document.getElementById("room");
+            if(rRoom) rRoom.value = pRoom;
+            if(tRoom) tRoom.value = pRoom;
+        }
+
+        // 頁面滾動與聚焦導引
         if (tab === 'advance') {
-            document.getElementById("receiptCard").scrollIntoView({ behavior: 'smooth' });
-            document.getElementById("receiptRoom").focus();
+            const receiptCard = document.getElementById("receiptCard");
+            const receiptElectricity = document.getElementById("receiptElectricity");
+            if(receiptCard) receiptCard.scrollIntoView({ behavior: 'smooth' });
+            if(receiptElectricity) receiptElectricity.focus(); // 直接聚焦在電費輸入框，加速操作
         } else if (tab === 'tenant') {
-            document.getElementById("tenantCard").scrollIntoView({ behavior: 'smooth' });
-            document.getElementById("room").focus();
+            const tenantCard = document.getElementById("tenantCard");
+            const name = document.getElementById("name");
+            if(tenantCard) tenantCard.scrollIntoView({ behavior: 'smooth' });
+            if(name) name.focus();
         }
     });
 
@@ -204,8 +226,6 @@
         .then(response => {
             if(!response.ok) throw new Error(`錯誤代碼: ${response.status}`);
             Swal.fire({ icon: 'success', title: '指令已送出！', text: successMsg + ' 請於 1 分鐘後確認 Telegram 財務表。' });
-            
-            // 成功後將表單房號與電費重設，避免重送
             document.getElementById("receiptRoom").value = "";
             document.getElementById("receiptElectricity").value = "0";
         })
