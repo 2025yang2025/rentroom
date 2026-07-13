@@ -1,110 +1,191 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>新增房客資料</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--tg-theme-bg-color, #f5f5f5); color: var(--tg-theme-text-color, #333); padding: 20px; }
-    .form-group { margin-bottom: 15px; }
-    label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 14px; }
-    input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
-    button { width: 100%; padding: 12px; background-color: var(--tg-theme-button-color, #2481cc); color: var(--tg-theme-button-text-color, #fff); border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
-    button:active { opacity: 0.8; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>房東管理系統 - 資料異動與收租確認</title>
+    <!-- 引入 Bootstrap 5 增強視覺質感 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f4f7f6; font-family: 'Helvetica Neue', Arial, sans-serif; }
+        .card { border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .btn-primary { background-color: #007bff; border: none; }
+        .btn-success { background-color: #28a745; border: none; }
+        .section-title { border-left: 5px solid #007bff; padding-left: 10px; margin-bottom: 20px; font-weight: bold; color: #333; }
+        .section-title.receipt { border-left-color: #28a745; }
+    </style>
 </head>
 <body>
 
-  <h3>➕ 新增房客資料</h3>
-  
-  <div class="form-group">
-    <label>地點</label>
-    <input type="text" id="location" placeholder="例如：台南市永康區">
-  </div>
-  <div class="form-group">
-    <label>房間</label>
-    <input type="text" id="room" placeholder="例如：A棟301室">
-  </div>
-  <div class="form-group">
-    <label>房客姓名</label>
-    <input type="text" id="name" placeholder="例如：陳大同">
-  </div>
-  <div class="form-group">
-    <label>每月租金</label>
-    <input type="number" id="rent" placeholder="例如：12000">
-  </div>
-  <div class="form-group">
-    <label>付款日期 (每月幾號)</label>
-    <input type="number" id="pay_day" placeholder="例如：5" min="1" max="31">
-  </div>
-  <div class="form-group">
-    <label>租約開始日期</label>
-    <input type="date" id="contract_start">
-  </div>
-  <div class="form-group">
-    <label>租約結束日期</label>
-    <input type="date" id="contract_end">
-  </div>
-  <div class="form-group">
-    <label>最後付款日期 (選填)</label>
-    <input type="date" id="last_paid_date">
-  </div>
+<div class="container py-4" style="max-width: 600px;">
+    <h2 class="text-center mb-4 fw-bold text-secondary">👑 房東智慧管理後台</h2>
 
-  <button type="button" onclick="submitToGitHub()">🚀 確認送出</button>
+    <!-- ================= 🟢 新增區塊：快速確認收租（含提前繳租） ================= -->
+    <div class="card p-4 mb-4">
+        <h4 class="section-title receipt">⚡ 快速確認收租 / 提前繳租登記</h4>
+        <p class="text-muted small">房客提早繳租時，直接在此選擇地點與房號，點擊確認即可。系統會自動記錄今天為繳租日，本月到期時便不會再發催繳通知。</p>
+        
+        <form id="receiptForm">
+            <div class="mb-3">
+                <label class="form-label font-weight-bold">📍 選擇租屋地區</label>
+                <select class="form-select" id="receiptLocation" required>
+                    <option value="" disabled selected>請選擇地區...</option>
+                    <option value="永康">永康</option>
+                    <option value="東區">東區</option>
+                    <option value="安平">安平</option>
+                </select>
+            </div>
 
-  <script>
-    // 初始化 Telegram Web App
-    const tg = window.Telegram.WebApp;
-    tg.ready();
-    tg.expand(); // 讓網頁全螢幕展開
+            <div class="mb-3">
+                <label class="form-label">🚪 輸入/選擇房號</label>
+                <input type="text" class="form-select" id="receiptRoom" placeholder="例如：101、A房" required>
+            </div>
 
-    function submitToGitHub() {
-      // 這裡填入你的配置
-      const OWNER = "你的GitHub帳號";
-      const REPO = "你的專案倉庫名稱";
-      // 建議申請一個只允許該 Repository Dispatch 權限的 Fine-grained Token
-      const TOKEN = "你的_GITHUB_PERSONAL_ACCESS_TOKEN"; 
+            <button type="submit" class="btn btn-success w-100 py-2 fw-bold" id="receiptBtn">
+                🟢 確認收到此房間本月租金
+            </button>
+        </form>
+    </div>
 
-      const payload = {
-        location: document.getElementById('location').value,
-        room: document.getElementById('room').value,
-        name: document.getElementById('name').value,
-        rent: document.getElementById('rent').value,
-        pay_day: document.getElementById('pay_day').value,
-        contract_start: document.getElementById('contract_start').value,
-        contract_end: document.getElementById('contract_end').value,
-        last_paid_date: document.getElementById('last_paid_date').value
-      };
+    <!-- ================= 🔵 原有區塊：房客資料追加、修訂與新增 ================= -->
+    <div class="card p-4">
+        <h4 class="section-title">📝 房客資料新增 / 修改</h4>
+        <p class="text-muted small">此區塊用於調整現有房客的租金、合約、電費欄位，或是新增全新房客（若房號已存在，則會直接覆蓋修訂該房客資料）。</p>
+        
+        <form id="tenantForm">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">📍 地區</label>
+                    <select class="form-select" id="location" required>
+                        <option value="永康">永康</option>
+                        <option value="東區">東區</option>
+                        <option value="安平">安平</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">🚪 房號</label>
+                    <input type="text" class="form-control" id="room" placeholder="例如: 102" required>
+                </div>
+            </div>
 
-      if(!payload.location || !payload.room || !payload.name || !payload.rent) {
-        alert("請填寫基本必填欄位（地點、房間、姓名、租金）");
-        return;
-      }
+            <div class="mb-3">
+                <label class="form-label">👤 房客姓名</label>
+                <input type="text" class="form-control" id="name" placeholder="例如: 林淑藝" required>
+            </div>
 
-      // 呼叫 GitHub API 觸發後台 Actions 腳本
-      fetch(`https://api.github.com/repos/${OWNER}/${REPO}/dispatches`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `token ${TOKEN}`,
-          'Accept': 'application/vnd.github.v3+json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          event_type: 'add_new_tenant',
-          client_payload: payload
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">💰 每月租金</label>
+                    <input type="number" class="form-control" id="rent" placeholder="例如: 6500" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">⚡ 當期電費</label>
+                    <input type="number" class="form-control" id="electricity" value="0">
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">📅 每月繳租日（幾號）</label>
+                <input type="number" class="form-control" id="pay_day" min="1" max="31" placeholder="例如: 10" required>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">📅 合約開始日</label>
+                    <input type="date" class="form-control" id="contract_start">
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">📅 合約結束日</label>
+                    <input type="date" class="form-control" id="contract_end">
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100 py-2 fw-bold" id="submitBtn">
+                💾 儲存 / 修改房客資料
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- 引入 SweetAlert2 讓彈出視窗更漂亮 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+    // 🛠️ 請在此更換為你自己的 GitHub 帳號資訊與 Token 權限
+    const GITHUB_USER = "2025yang2025"; 
+    const REPO_NAME = "rent-form";
+    const GITHUB_TOKEN = "你的_GITHUB_TOKEN_請保留你原本網頁內的那串字"; 
+
+    // 發送直連訊號至 GitHub Actions 的萬用函式
+    function dispatchToGitHub(payloadData, buttonEl, successMsg) {
+        const originalText = buttonEl.innerHTML;
+        buttonEl.disabled = true;
+        buttonEl.innerHTML = `<span class="spinner-border spinner-border-sm"></span> 處理中，請稍候...`;
+
+        fetch(`https://api.github.com/repos/${GITHUB_USER}/${REPO_NAME}/dispatches`, {
+            method: "POST",
+            headers: {
+                "Accept": "application/vnd.github+json",
+                "Authorization": `Bearer ${GITHUB_TOKEN}`,
+                "X-GitHub-Api-Version": "2022-11-28"
+            },
+            body: JSON.stringify({
+                event_type: "webhook_event",
+                client_payload: payloadData
+            })
         })
-      })
-      .then(response => {
-        if (response.status === 204) {
-          alert('🚀 資料已成功提交給 GitHub 排程，請待 30 秒後更新！');
-          tg.close(); // 自動關閉 Telegram 網頁彈出視窗
-        } else {
-          alert('提交失敗，請檢查 Token 設定是否正確。');
-        }
-      })
-      .catch(err => alert('發生錯誤: ' + err));
+        .then(response => {
+            if (response.status === 204 || response.ok) {
+                Swal.fire({ icon: 'success', title: '發送成功！', text: successMsg + ' 系統正在重新計算報表，約1分鐘後Telegram會更新。', confirmButtonColor: '#28a745' });
+            } else {
+                Swal.fire({ icon: 'error', title: '發送失敗', text: `錯誤碼: ${response.status}，請檢查Token權限。` });
+            }
+        })
+        .catch(err => {
+            Swal.fire({ icon: 'error', title: '連線錯誤', text: err.message });
+        })
+        .finally(() => {
+            buttonEl.disabled = false;
+            buttonEl.innerHTML = originalText;
+        });
     }
-  </script>
+
+    // 表單一：處理「快速收租 / 提前繳租」
+    document.getElementById("receiptForm").addEventListener("submit", function(e) {
+        e.preventDefault();
+        const loc = document.getElementById("receiptLocation").value;
+        const rm = document.getElementById("receiptRoom").value.trim();
+        const btn = document.getElementById("receiptBtn");
+
+        const data = {
+            action_type: "confirm_receipt",
+            location: loc,
+            room: rm
+        };
+
+        dispatchToGitHub(data, btn, `【${loc} - ${rm}】收租確認訊號已送出！`);
+    });
+
+    // 表單二：處理「房客資料新增 / 修改」
+    document.getElementById("tenantForm").addEventListener("submit", function(e) {
+        e.preventDefault();
+        const btn = document.getElementById("submitBtn");
+
+        const data = {
+            action_type: "add_tenant",
+            location: document.getElementById("location").value,
+            room: document.getElementById("room").value.trim(),
+            name: document.getElementById("name").value.trim(),
+            rent: document.getElementById("rent").value,
+            electricity: document.getElementById("electricity").value,
+            pay_day: document.getElementById("pay_day").value,
+            contract_start: document.getElementById("contract_start").value,
+            contract_end: document.getElementById("contract_end").value
+        };
+
+        dispatchToGitHub(data, btn, `【${data.location} - ${data.room} ${data.name}】資料變更訊號已送出！`);
+    });
+</script>
+
 </body>
 </html>
