@@ -52,17 +52,29 @@ def handle_web_dispatch():
     def clean_str(s):
         return "".join(str(s).split()).replace("房", "").lower()
 
-    # ─── 分流 A：確認收到租金（支援正常收租與提前繳租） ───
+   # ─── 分流 A：確認收到租金（支援正常收租與提前繳租） ───
     if action_type in ["confirm_receipt", "advance_receipt"]:
         room = str(payload.get("room", "")).strip()
         location = str(payload.get("location", "")).strip()
-        today_str = date.today().strftime("%Y-%m-%d")
-        this_month_key = today_str[:7]
         
+        # 修正：根據動作動態計算歸檔月份
+        from datetime import timedelta
+        today_date = date.today()
+        today_str = today_date.strftime("%Y-%m-%d")
+        
+        if action_type == "advance_receipt":
+            # 提前繳租：計算下個月的年月份 (例如 2026-07 變 2026-08)
+            # 透過將當月最後一天再加 1 天來安全取得下個月
+            next_month_date = (today_date.replace(day=28) + timedelta(days=4))
+            this_month_key = next_month_date.strftime("%Y-%m")
+            mode_text = "提前繳租"
+        else:
+            this_month_key = today_str[:7]
+            mode_text = "正常收租"
+            
         web_elec = payload.get("electricity")
+        print(f"▶ 執行【{mode_text}確認】: {location} - {room} (歸檔月份: {this_month_key})")
         
-        mode_text = "正常收租" if action_type == "confirm_receipt" else "提前繳租"
-        print(f"▶ 執行【{mode_text}確認】: {location} - {room}")
         updated = False
         for t in tenants:
             if clean_str(t.get("room", "")) == clean_str(room) and clean_str(t.get("location", "")) == clean_str(location):
@@ -75,10 +87,11 @@ def handle_web_dispatch():
                 if "electricity_history" not in t:
                     t["electricity_history"] = {}
                 
+                # 寫入正確的月份歷史
                 t["electricity_history"][this_month_key] = elec_amount
                 t["electricity"] = 0 # 收齊後，當期應繳電費歸零
                 updated = True
-                print(f"✅ 更新最後繳租日為 {today_str}，本月電費 {elec_amount} 元已歸檔並歸零。")
+                print(f"✅ 更新最後繳租日為 {today_str}，[{this_month_key}] 紀錄電費 {elec_amount} 元已歸檔並歸零。")
                 break
         if not updated:
             print(f"⚠️ 找不到對應房間：{location} {room}")
