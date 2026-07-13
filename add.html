@@ -47,38 +47,39 @@
         <h4 class="section-title receipt">⚡ 快速確認收租 / 提前繳租登記</h4>
         <p class="text-muted small">系統會自動根據按鈕帶入房客資訊。如果是提前繳租，系統會自動記錄今天為繳付日，並在本月繳租日到期時判定已繳清。</p>
         
-        <form id="receiptForm">
+        <form id="receiptForm" onsubmit="return false;">
             <div class="row">
                 <div class="col-md-6 mb-3">
                     <label class="form-label fw-bold">📍 租屋地區</label>
-                    <select class="form-select" id="receiptLocation" required>
-                        <option value="" disabled selected>請選擇地區...</option>
+                    <select class="form-select" id="receiptLocation">
+                        <option value="">-- 請選擇地區 --</option>
                         <option value="永康">永康</option>
                         <option value="東區">東區</option>
                         <option value="安平">安平</option>
-                        <option value="中華西602">中華西602</option> <!-- 補上你截圖中的地區範例 -->
+                        <option value="中華西602">中華西602</option>
                     </select>
                 </div>
                 <div class="col-md-6 mb-3">
                     <label class="form-label fw-bold">🚪 房號</label>
-                    <input type="text" class="form-control" id="receiptRoom" placeholder="例如：101" required>
+                    <input type="text" class="form-control" id="receiptRoom" placeholder="例如：101">
                 </div>
             </div>
 
             <div class="mb-3">
                 <label class="form-label fw-bold">⚡ 本期收到的電費 (元)</label>
-                <input type="number" class="form-control" id="receiptElectricity" value="0" min="0" required>
+                <input type="number" class="form-control" id="receiptElectricity" value="0" min="0">
                 <div class="form-text text-muted">若本次未收到電費或已內含，請維持 0。</div>
             </div>
 
-            <div class="row g-2">
+            <!-- 🛠️ 確保按鈕與表單驗證分離，點擊即可直接觸發對應 JS 邏輯 -->
+            <div class="row g-2 pt-2">
                 <div class="col-6">
                     <button type="button" class="btn btn-success w-100 py-2 fw-bold" id="btnNormal" onclick="submitReceipt('confirm_receipt')">
                         🟢 正常收本月租金
                     </button>
                 </div>
                 <div class="col-6">
-                    <button type="button" class="btn btn-success w-100 py-2 fw-bold" id="btnAdvance" style="background-color: #20c997;" onclick="submitReceipt('advance_receipt')">
+                    <button type="button" class="btn btn-info text-white w-100 py-2 fw-bold" id="btnAdvance" style="background-color: #20c997; border: none;" onclick="submitReceipt('advance_receipt')">
                         ⏩ 確認提前繳租
                     </button>
                 </div>
@@ -143,19 +144,16 @@
 </div>
 
 <script>
-    // 💡 智慧型自動路由與資料填入機制
     document.addEventListener("DOMContentLoaded", function() {
         if(localStorage.getItem("git_user")) document.getElementById("gitUser").value = localStorage.getItem("git_user");
         if(localStorage.getItem("git_repo")) document.getElementById("gitRepo").value = localStorage.getItem("git_repo");
         if(localStorage.getItem("git_token")) document.getElementById("gitToken").value = localStorage.getItem("git_token");
 
-        // 解析 URL 參數
         const urlParams = new URLSearchParams(window.location.search);
         const tab = urlParams.get('tab');
         const pRoom = urlParams.get('room');
         const pLocation = urlParams.get('location');
         
-        // 核心自動填入邏輯：如果網址有帶房間資訊，不論在哪個頁籤都幫房東填好
         if (pLocation) {
             const rLoc = document.getElementById("receiptLocation");
             const tLoc = document.getElementById("location");
@@ -169,17 +167,24 @@
             if(tRoom) tRoom.value = pRoom;
         }
 
-        // 頁面滾動與聚焦導引
         if (tab === 'advance') {
             const receiptCard = document.getElementById("receiptCard");
+            const receiptRoom = document.getElementById("receiptRoom");
             const receiptElectricity = document.getElementById("receiptElectricity");
+            
             if(receiptCard) receiptCard.scrollIntoView({ behavior: 'smooth' });
-            if(receiptElectricity) receiptElectricity.focus(); // 直接聚焦在電費輸入框，加速操作
+            
+            // 智慧聚焦：如果沒帶房號，聚焦在房號框；有帶房號則直接聚焦在電費框
+            if(receiptRoom && !pRoom) {
+                receiptRoom.focus();
+            } else if (receiptElectricity) {
+                receiptElectricity.focus();
+            }
         } else if (tab === 'tenant') {
             const tenantCard = document.getElementById("tenantCard");
-            const name = document.getElementById("name");
+            const room = document.getElementById("room");
             if(tenantCard) tenantCard.scrollIntoView({ behavior: 'smooth' });
-            if(name) name.focus();
+            if(room) room.focus();
         }
     });
 
@@ -243,8 +248,13 @@
         const rm = document.getElementById("receiptRoom").value.trim();
         const elec = document.getElementById("receiptElectricity").value;
         
-        if (!loc || !rm) {
-            Swal.fire({ icon: 'warning', title: '欄位未完整', text: '請先選擇地區並填寫房號！' });
+        // 自訂親切提示，不再被表單綁死
+        if (!loc || loc === "") {
+            Swal.fire({ icon: 'warning', title: '欄位未選', text: '請先選擇「租屋地區」！' });
+            return;
+        }
+        if (!rm) {
+            Swal.fire({ icon: 'warning', title: '欄位未填', text: '請填寫「房號」！' });
             return;
         }
 
