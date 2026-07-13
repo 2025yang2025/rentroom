@@ -2,17 +2,26 @@ import os
 import json
 from datetime import date
 import requests
-import urllib.parse  # 引入網址編碼模組
+import urllib.parse
 
-# ─── 基礎路徑與環境變數設定 ───
 json_path = "tenants.json"
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
+print("=== 🔍 系統環境檢查 ===")
+print(f"TELEGRAM_BOT_TOKEN 存在狀態: { '✓ 填寫中' if BOT_TOKEN else '✗ 找不到變數(空值)' }")
+print(f"TELEGRAM_CHAT_ID 存在狀態: { '✓ 填寫中' if CHAT_ID else '✗ 找不到變數(空值)' }")
+
 if os.path.exists(json_path):
     with open(json_path, 'r', encoding='utf-8') as f:
-        tenants = json.load(f)
+        try:
+            tenants = json.load(f)
+            print(f"📂 成功載入資料庫，目前共有 {len(tenants)} 筆房客資料。")
+        except Exception as e:
+            print(f"❌ 讀取 tenants.json 失敗（可能 JSON 格式壞掉了）: {e}")
+            tenants = []
 else:
+    print("⚠️ 找不到 tenants.json，初始化空列表。")
     tenants = []
 
 def handle_web_dispatch():
@@ -22,6 +31,7 @@ def handle_web_dispatch():
     if event_name != "repository_dispatch":
         return False 
 
+    print("📥 偵測到來自網頁的直連訊號...")
     try:
         payload = json.loads(client_payload_str)
     except Exception as e:
@@ -83,6 +93,7 @@ def handle_web_dispatch():
     return True
 
 def send_main_menu():
+    print("🎬 開始建立 Telegram 訊息與按鈕...")
     today = date.today()
     current_month_str = today.strftime("%Y-%m")
     
@@ -96,11 +107,9 @@ def send_main_menu():
         else:
             unpaid_list.append(t)
 
-    # 建立內文
     msg = f"<b>👑 房東智慧收租管理主選單</b>\n"
     msg += f"📅 統計月份：{today.strftime('%Y年%m月')}\n"
     msg += f"───────────────────\n\n"
-    
     msg += f"🔴 <b>【本月待繳 / 未完成名單】</b>\n"
     
     inline_keyboard = []
@@ -113,7 +122,6 @@ def send_main_menu():
             msg += f" 📍 {t['location']}-{t['room']} {t['name']} (每月{t['pay_day']}日)\n"
             msg += f"    ↳ 💰 租金: {t['rent']} 元 / ⚡ 當期電費: {current_elec} 元\n"
             
-            # 🌟 修正：對中文字元進行安全網址編碼 (防止 Telegram 拒收中文字網址)
             safe_loc = urllib.parse.quote(str(t['location']))
             safe_room = urllib.parse.quote(str(t['room']))
             base_url = f"https://2025yang2025.github.io/rent-form/add.html?loc={safe_loc}&room={safe_room}"
@@ -133,12 +141,10 @@ def send_main_menu():
             msg += f" ✅ {t['location']}-{t['room']} {t['name']}\n"
             msg += f"    ↳ 已於 {t['last_paid_date']} 勾記 (實收電費: {history_elec} 元)\n"
 
-    # 萬用底端按鈕
     inline_keyboard.append([
         {"text": "⚙️ 開啟智慧管理後台主網頁", "url": "https://2025yang2025.github.io/rent-form/add.html"}
     ])
 
-    # 🎯 第一次嘗試：發送帶有精細房間按鈕的完整選單
     payload = {
         "chat_id": CHAT_ID,
         "text": msg,
@@ -147,22 +153,22 @@ def send_main_menu():
     }
     
     url = f"https://api.telegram.com/bot{BOT_TOKEN}/sendMessage"
-    res = requests.post(url, json=payload)
     
-    # 🛡️ 安全降級防護機制：如果因為按鈕太複雜被 Telegram 拒收，自動退回只帶一個萬用按鈕的安全模式
-    if not res.ok:
-        print(f"⚠️ 完整選單發送失敗，原因: {res.text}。啟動安全降級機制...")
-        fallback_keyboard = [[
-            {"text": "⚙️ 開啟智慧管理後台主網頁", "url": "https://2025yang2025.github.io/rent-form/add.html"}
-        ]]
-        payload["reply_markup"] = {"inline_keyboard": fallback_keyboard}
-        res_fallback = requests.post(url, json=payload)
-        if res_fallback.ok:
-            print("🚀 安全降級選單發送成功！(已避開複雜按鈕錯誤)")
-        else:
-            print(f"❌ 終極發送失敗: {res_fallback.text}")
-    else:
-        print("🚀 Telegram 整合主選單與獨立按鈕發送成功！")
+    print("📡 正在嘗試發送完整選單至 Telegram API...")
+    try:
+        res = requests.post(url, json=payload, timeout=10)
+        print(f"📥 Telegram 原始回應代碼: {res.status_code}")
+        print(f"📥 Telegram 原始回應內文: {res.text}")
+        
+        if not res.ok:
+            print("⚠️ 完整選單發送被拒，嘗試安全降級（只保留單一後台按鈕）...")
+            fallback_keyboard = [[{"text": "⚙️ 開啟智慧管理後台主網頁", "url": "https://2025yang2025.github.io/rent-form/add.html"}]]
+            payload["reply_markup"] = {"inline_keyboard": fallback_keyboard}
+            res_fallback = requests.post(url, json=payload, timeout=10)
+            print(f"📥 降級回應代碼: {res_fallback.status_code}")
+            print(f"📥 降級回應內文: {res_fallback.text}")
+    except Exception as api_err:
+        print(f"❌ 連線至 Telegram API 時發生網路層崩潰: {api_err}")
 
 if __name__ == "__main__":
     handle_web_dispatch()
