@@ -78,7 +78,7 @@
                 <input type="number" class="form-control" id="rent" placeholder="例如：8000" oninput="updateDynamicTitle()">
             </div>
 
-            <!-- 新增/調整：每月繳租日提前至上方，並與動態標題連動 -->
+            <!-- 每月繳租日 -->
             <div class="mb-3">
                 <label class="form-label">📅 每月繳租日（幾號繳租，不改不填）</label>
                 <input type="number" class="form-control" id="pay_day" min="1" max="31" placeholder="例如：10" oninput="updateDynamicTitle()">
@@ -101,19 +101,19 @@
             <div class="row">
                 <div class="col-6 mb-3">
                     <label class="form-label">📝 合約開始日</label>
-                    <input type="date" class="form-control" id="contract_start">
+                    <input type="date" class="date-input form-control" id="contract_start">
                 </div>
                 <div class="col-6 mb-3">
                     <label class="form-label">⏳ 合約結束日</label>
-                    <input type="date" class="form-control" id="contract_end">
+                    <input type="date" class="date-input form-control" id="contract_end">
                 </div>
             </div>
 
-            <!-- 🛠️ 底部完美整合：雙智慧按鈕 -->
-            <div class="row g-2 mt-2">
+            <!-- 🛠️ 底部完美整合：智慧按鈕區 (會根據 TG 點擊的動作自動高亮主要按鈕) -->
+            <div class="row g-2 mt-2" id="actionButtonArea">
                 <div class="col-6">
                     <button type="button" class="btn btn-primary w-100 py-3 fw-bold" id="submitBtn" onclick="submitTenantData()">
-                        🚀 儲存並同步至系統
+                        🚀 儲存變更並同步
                     </button>
                 </div>
                 <div class="col-6">
@@ -137,6 +137,7 @@
         // 解析 Telegram 帶來的網址參數
         const urlParams = new URLSearchParams(window.location.search);
         const tab = urlParams.get('tab');
+        const action = urlParams.get('action'); // 讀取 main.py 帶來的 confirm 或 advance
         const pRoom = urlParams.get('room');
         const pLocation = urlParams.get('location');
         const pName = urlParams.get('name');
@@ -154,8 +155,23 @@
         updateDynamicTitle();
         updateElectricityDisplay();
 
-        // 智慧聚焦：若是提前繳租，畫面直接推到電費輸入框並聚焦
-        if (tab === 'advance') {
+        // 🚨 智慧按鈕分流改造控制
+        const submitBtn = document.getElementById("submitBtn");
+        const btnAdvance = document.getElementById("btnAdvance");
+
+        if (action === 'confirm') {
+            // 狀態 A：如果是從「正常收租」點進來
+            submitBtn.className = "btn btn-success w-100 py-3 fw-bold"; // 變成綠色
+            submitBtn.innerHTML = "🟢 確認正常收租";
+            submitBtn.setAttribute("onclick", "submitNormalReceipt()"); // 改變綁定的 function
+            btnAdvance.className = "btn btn-secondary w-100 py-3 fw-bold opacity-50"; // 提前繳租按鈕變淡防誤觸
+        } else if (action === 'advance' || tab === 'advance') {
+            // 狀態 B：如果是從「提前繳租」點進來
+            btnAdvance.className = "btn w-100 py-3 fw-bold text-white animated-pulse";
+            btnAdvance.style.backgroundColor = "#20c997";
+            submitBtn.className = "btn btn-secondary w-100 py-3 fw-bold opacity-50"; // 新增修改按鈕變淡防誤觸
+            
+            // 智慧聚焦到電費輸入框
             const inputElectricity = document.getElementById("electricity");
             if (inputElectricity) {
                 inputElectricity.focus();
@@ -249,7 +265,7 @@
         });
     }
 
-    // 按鈕一：🚀 儲存並同步至系統
+    // 按鈕：🚀 儲存變更並同步（萬用新增/修改修改）
     function submitTenantData() {
         const loc = document.getElementById("location").value.trim();
         const rm = document.getElementById("room").value.trim();
@@ -273,10 +289,32 @@
         };
 
         const btn = document.getElementById("submitBtn");
-        dispatchToGitHub(data, btn, `【${loc}-${rm}】基本資料與合約修訂變更`);
+        dispatchToGitHub(data, btn, `【${loc}-${rm}】基本資料與合約修訂變更成功`);
     }
 
-    // 按鈕二：⏩ 確認提前繳租
+    // 按鈕：🟢 確認正常收租 (對應 main.py 的 confirm_receipt)
+    function submitNormalReceipt() {
+        const loc = document.getElementById("location").value.trim();
+        const rm = document.getElementById("room").value.trim();
+        const elec = document.getElementById("electricity").value;
+
+        if (!loc || !rm) {
+            Swal.fire({ icon: 'warning', title: '欄位未完整', text: '請確認「地點」與「房間號碼」！' });
+            return;
+        }
+
+        const data = {
+            action_type: "confirm_receipt",
+            location: loc,
+            room: rm,
+            electricity: parseInt(elec) || 0
+        };
+
+        const btn = document.getElementById("submitBtn");
+        dispatchToGitHub(data, btn, `【${loc}-${rm}】當期正常收租確認銷帳中！`);
+    }
+
+    // 按鈕：⏩ 確認提前繳租 (對應 main.py 的 advance_receipt)
     function submitAdvanceReceipt() {
         const loc = document.getElementById("location").value.trim();
         const rm = document.getElementById("room").value.trim();
