@@ -46,9 +46,9 @@
     <!-- ================= 📝 房客資料與財務管理表單 ================= -->
     <div class="card p-4 mb-4">
         <h4 class="text-center fw-bold mb-2">➕ 房客資料與財務管理</h4>
-        <p class="text-center text-muted small mb-4">💡 填寫「地點、房號」為核心必填，再依據您的目的點擊最下方對應的彩色功能按鈕送出即可。</p>
+        <p class="text-center text-muted small mb-4">💡 輸入「地點與房號」後，系統會自動從 tenants.json 撈取最新資料並自動填入下方欄位。</p>
         
-        <!-- 頂部即時動態標題 (包含地點、房號、姓名、租金、押金、繳租日) -->
+        <!-- 頂部即時動態標題 -->
         <div id="dynamicTitle" class="alert alert-info text-center fw-bold d-none" style="font-size: 1.1rem;"></div>
 
         <form id="tenantForm" onsubmit="return false;">
@@ -56,18 +56,18 @@
             <!-- 核心必填群組 -->
             <div class="highlight-group mb-3">
                 <div class="mb-3">
-                    <label class="form-label">📍 地點（如：齊德500地區、中華西602地區）</label>
-                    <input type="text" class="form-control" id="location" placeholder="例如：齊德500地區" required oninput="updateDynamicTitle()">
+                    <label class="form-label">📍 地點（如：齊德500地區）</label>
+                    <input type="text" class="form-control" id="location" placeholder="例如：齊德500地區" required oninput="matchAndUpdateTenantData()">
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label">🚪 房間號碼（如：101）</label>
-                    <input type="text" class="form-control" id="room" placeholder="例如：101" required oninput="updateDynamicTitle()">
+                    <label class="form-label">🚪 房間號碼（如：102）</label>
+                    <input type="text" class="form-control" id="room" placeholder="例如：102" required oninput="matchAndUpdateTenantData()">
                 </div>
 
                 <div class="mb-0">
-                    <label class="form-label">👤 房客姓名（選填）</label>
-                    <input type="text" class="form-control" id="name" placeholder="例如：杜佳威" oninput="updateDynamicTitle()">
+                    <label class="form-label">👤 房客姓名</label>
+                    <input type="text" class="form-control" id="name" placeholder="自動撈取中..." oninput="updateDynamicTitle()">
                 </div>
             </div>
 
@@ -77,23 +77,22 @@
                     <label class="form-label mb-0" style="color: #fd7e14;">⚡ 當期應繳電費（新抄表金額）</label>
                     <span id="electricityDisplay" class="electricity-badge">目前填寫：0 元</span>
                 </div>
-                <input type="number" class="form-control" id="electricity" placeholder="例如：1250" value="0" oninput="updateElectricityDisplay()">
+                <input type="number" class="form-control" id="electricity" placeholder="自動撈取中..." value="0" oninput="updateElectricityDisplay()">
             </div>
 
             <div class="mb-3">
-                <label class="form-label">💰 每月租金（不改不填）</label>
-                <input type="number" class="form-control" id="rent" placeholder="例如：8000" oninput="updateDynamicTitle()">
+                <label class="form-label">💰 每月租金</label>
+                <input type="number" class="form-control" id="rent" placeholder="自動撈取中..." oninput="updateDynamicTitle()">
             </div>
 
             <div class="mb-3">
-                <label class="form-label">🔒 押金總額（追加/修改在此填新總額）</label>
-                <!-- 加上 oninput 觸發即時同步顯示在上方提示框 -->
-                <input type="number" class="form-control" id="deposit" placeholder="例如：16000" oninput="updateDynamicTitle()">
+                <label class="form-label">🔒 押金總額</label>
+                <input type="number" class="form-control" id="deposit" placeholder="自動撈取中..." oninput="updateDynamicTitle()">
             </div>
 
             <div class="mb-3">
-                <label class="form-label">📅 每月繳租日（幾號繳租，不改不填）</label>
-                <input type="number" class="form-control" id="pay_day" min="1" max="31" placeholder="例如：10" oninput="updateDynamicTitle()">
+                <label class="form-label">📅 每月繳租日（號）</label>
+                <input type="number" class="form-control" id="pay_day" min="1" max="31" placeholder="自動撈取中..." oninput="updateDynamicTitle()">
             </div>
 
             <div class="row">
@@ -109,19 +108,16 @@
 
             <!-- 🛠️ 底部功能按鈕區塊 -->
             <div class="row g-2 mt-3">
-                <!-- 1. 正常當期收租 (綠色大按鈕) -->
                 <div class="col-12">
                     <button type="button" class="btn btn-success w-100 py-3 fw-bold fs-5 shadow-sm text-white" id="btnNormal" onclick="submitNormalReceipt()">
                         🟢 確認正常當期收租 (送出銷帳)
                     </button>
                 </div>
-                <!-- 2. 提前繳租銷帳 (黃色大按鈕) -->
                 <div class="col-12">
                     <button type="button" class="btn btn-warning w-100 py-3 fw-bold fs-5 shadow-sm text-dark" id="btnAdvance" onclick="submitAdvanceReceipt()">
                         ⏩ 確認提前繳租 (送出銷帳)
                     </button>
                 </div>
-                <!-- 3. 修改/新增基本資料 (藍色小按鈕) -->
                 <div class="col-12 mt-2">
                     <button type="button" class="btn btn-primary w-100 py-2 fw-bold shadow-sm text-white" id="btnUpdate" onclick="submitTenantData()">
                         🚀 僅儲存/變更基本資料與合約
@@ -134,6 +130,8 @@
 </div>
 
 <script>
+    let globalTenantsData = []; // 用於存放從 GitHub 下載的完整房客清單
+
     function getQueryParam(paramName) {
         const url = window.location.href;
         const regex = new RegExp('[?&]' + paramName + '=([^&#]*)', 'i');
@@ -146,29 +144,76 @@
         if(localStorage.getItem("git_repo")) document.getElementById("gitRepo").value = localStorage.getItem("git_repo");
         if(localStorage.getItem("git_token")) document.getElementById("gitToken").value = localStorage.getItem("git_token");
 
+        // 如果網址本身有帶參數則先帶入
         if (getQueryParam('location')) document.getElementById("location").value = getQueryParam('location');
         if (getQueryParam('room')) document.getElementById("room").value = getQueryParam('room');
-        if (getQueryParam('name')) document.getElementById("name").value = getQueryParam('name');
-        if (getQueryParam('rent')) document.getElementById("rent").value = getQueryParam('rent');
-        if (getQueryParam('pay_day')) document.getElementById("pay_day").value = getQueryParam('pay_day');
 
-        // 多變數相容檢查 (電費)
-        const pElectricity = getQueryParam('electricity') || getQueryParam('elec') || getQueryParam('utility');
-        if (pElectricity) {
-            document.getElementById("electricity").value = pElectricity;
+        // 🔥 初始化：直接從 GitHub Fetch 最新 tenants.json
+        fetchLatestTenantsJSON();
+    });
+
+    // 🔒 從 GitHub 異步撈取最新的 tenants.json 檔案
+    function fetchLatestTenantsJSON() {
+        const user = localStorage.getItem("git_user");
+        const repo = localStorage.getItem("git_repo");
+        const token = localStorage.getItem("git_token");
+
+        if(!user || !repo || !token) return;
+
+        // 加 headers 避免 Private repo 抓不到，且能抓到最新提交的內容
+        fetch(`https://api.github.com/repos/${user}/${repo}/contents/tenants.json`, {
+            headers: {
+                "Accept": "application/vnd.github.v3.raw",
+                "Authorization": `Bearer ${token}`,
+                "Cache-Control": "no-cache"
+            }
+        })
+        .then(res => {
+            if(!res.ok) throw new Error("無法讀取 JSON 檔案");
+            return res.json();
+        })
+        .then(data => {
+            // 確保資料是陣列格式
+            globalTenantsData = Array.isArray(data) ? data : (data.tenants || []);
+            console.log("成功同步後端房客資料，共計: " + globalTenantsData.length + " 筆");
+            // 載入完成後嘗試比對一次（針對 Telegram 進來已自帶地點房號的情況）
+            matchAndUpdateTenantData();
+        })
+        .catch(err => {
+            console.error("撈取 tenants.json 失敗:", err.message);
+        });
+    }
+
+    // 🎯 核心聯想機制：當使用者輸入地點與房號時，自動在快取資料中進行搜尋比對
+    function matchAndUpdateTenantData() {
+        const inputLocation = document.getElementById("location").value.trim();
+        const inputRoom = document.getElementById("room").value.trim();
+
+        if (!inputLocation || !inputRoom || globalTenantsData.length === 0) {
+            updateDynamicTitle();
+            return;
         }
 
-        // 押金解析帶入
-        const pDeposit = getQueryParam('deposit');
-        if (pDeposit) {
-            document.getElementById("deposit").value = pDeposit;
+        // 在陣列中尋找符合地點與房間號碼的房客資料
+        const match = globalTenantsData.find(t => 
+            String(t.location).includes(inputLocation) && String(t.room) === String(inputRoom)
+        );
+
+        if (match) {
+            // 自動幫忙填入表單欄位
+            document.getElementById("name").value = match.name || "";
+            document.getElementById("rent").value = match.rent || "";
+            document.getElementById("deposit").value = match.deposit || "";
+            document.getElementById("pay_day").value = match.pay_day || "";
+            document.getElementById("electricity").value = match.electricity || 0;
+            if(match.contract_start) document.getElementById("contract_start").value = match.contract_start;
+            if(match.contract_end) document.getElementById("contract_end").value = match.contract_end;
         }
 
         updateDynamicTitle();
         updateElectricityDisplay();
-    });
+    }
 
-    // 🌟 即時動態標題更新 (同步將押金與繳租日渲染到頂部)
     function updateDynamicTitle() {
         const room = document.getElementById("room").value.trim();
         const name = document.getElementById("name").value.trim();
@@ -212,6 +257,7 @@
         localStorage.setItem("git_token", document.getElementById("gitToken").value.trim());
         Swal.fire('設定成功', '連線金鑰已加密儲存於本地瀏覽器中。', 'success');
         toggleConfig();
+        fetchLatestTenantsJSON(); // 儲存後立即重新拉取
     }
 
     function dispatchToGitHub(payloadData, buttonId, successMsg) {
