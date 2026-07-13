@@ -11,7 +11,6 @@
         .card { border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
         .btn-primary { background-color: #007bff; border: none; }
         .btn-success { background-color: #28a745; border: none; }
-        .btn-warning { background-color: #ffc107; color: #212529; border: none; }
         .section-title { border-left: 5px solid #007bff; padding-left: 10px; margin-bottom: 20px; font-weight: bold; color: #333; }
         .section-title.receipt { border-left-color: #28a745; }
     </style>
@@ -24,7 +23,7 @@
     <!-- ================= 🟢 快速確認收租與提前繳租區塊 ================= -->
     <div class="card p-4 mb-4">
         <h4 class="section-title receipt">⚡ 快速確認收租 / 提前繳租登記</h4>
-        <p class="text-muted small">請輸入地區、房號及當期收到的電費。根據房客繳交的期數，點選下方對應的確認按鈕：</p>
+        <p class="text-muted small">請輸入地區、房號及當期收到的電費。如果是提早繳租，系統會自動記錄今天為繳付日，並在本月繳租日到期時判定已繳清。</p>
         
         <form id="receiptForm">
             <div class="row">
@@ -50,7 +49,7 @@
                 <div class="form-text text-muted">若本次未收到電費或已內含，請維持 0。</div>
             </div>
 
-            <!-- 功能分流按鈕：正常收租與提前收租 -->
+            <!-- 功能分流按鈕 -->
             <div class="row g-2">
                 <div class="col-6">
                     <button type="button" class="btn btn-success w-100 py-2 fw-bold" id="btnNormal" onclick="submitReceipt('confirm_receipt')">
@@ -58,8 +57,8 @@
                     </button>
                 </div>
                 <div class="col-6">
-                    <button type="button" class="btn btn-warning w-100 py-2 fw-bold" id="btnAdvance" onclick="submitReceipt('advance_receipt')">
-                        ⏩ 登記提前繳租
+                    <button type="button" class="btn btn-success w-100 py-2 fw-bold" id="btnAdvance" style="background-color: #20c997;" onclick="submitReceipt('advance_receipt')">
+                        ⏩ 確認提前繳租
                     </button>
                 </div>
             </div>
@@ -69,7 +68,7 @@
     <!-- ================= 🔵 原有區塊：房客基本資料維護 ================= -->
     <div class="card p-4">
         <h4 class="section-title">📝 房客基本資料新增 / 修改</h4>
-        <p class="text-muted small">此區塊僅用於調整基本合約與基本資料。欲登記每月收租請用上方區塊。</p>
+        <p class="text-muted small">此區塊僅用於調整基本合約與基本資料。欲登記每月收租與電費請用上方綠色區塊。</p>
         
         <form id="tenantForm">
             <div class="row">
@@ -83,7 +82,7 @@
                 </div>
                 <div class="col-md-6 mb-3">
                     <label class="form-label">🚪 房號</label>
-                    <input type="text" class="form-control" id="room" placeholder="例如: 102" required>
+                    <input type="text" class="form-control" id="room" placeholder="ignore: 102" required>
                 </div>
             </div>
 
@@ -121,7 +120,7 @@
     </div>
 </div>
 
-<!-- 引入 SweetAlert2 讓彈出視窗更漂亮 -->
+<!-- 引入 SweetAlert2 彈出視窗 -->
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script>
@@ -136,7 +135,6 @@
         buttonEl.disabled = true;
         buttonEl.innerHTML = `<span class="spinner-border spinner-border-sm"></span>...`;
 
-        // 停用另一個按鈕防止重複點擊
         const otherBtn = buttonEl.id === "btnNormal" ? document.getElementById("btnAdvance") : document.getElementById("btnNormal");
         if (otherBtn) otherBtn.disabled = true;
 
@@ -169,7 +167,7 @@
         });
     }
 
-    // 處理收租表單提交（根據點選按鈕傳入不同 action_type）
+    // 處理收租與提前收租表單提交
     function submitReceipt(actionType) {
         const loc = document.getElementById("receiptLocation").value;
         const rm = document.getElementById("receiptRoom").value.trim();
@@ -181,7 +179,7 @@
         }
 
         const btn = actionType === "confirm_receipt" ? document.getElementById("btnNormal") : document.getElementById("btnAdvance");
-        const typeText = actionType === "confirm_receipt" ? "【正常收本月租金】" : "【登記提前繳租】";
+        const typeText = actionType === "confirm_receipt" ? "【正常收本月租金】" : "【確認提前繳租】";
 
         const data = {
             action_type: actionType,
