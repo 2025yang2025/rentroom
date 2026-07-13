@@ -11,6 +11,7 @@
         .card { border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
         .btn-primary { background-color: #007bff; border: none; }
         .btn-success { background-color: #28a745; border: none; }
+        .btn-warning { background-color: #ffc107; color: #212529; border: none; }
         .section-title { border-left: 5px solid #007bff; padding-left: 10px; margin-bottom: 20px; font-weight: bold; color: #333; }
         .section-title.receipt { border-left-color: #28a745; }
     </style>
@@ -20,10 +21,10 @@
 <div class="container py-4" style="max-width: 600px;">
     <h2 class="text-center mb-4 fw-bold text-secondary">👑 房東智慧管理後台</h2>
 
-    <!-- ================= 🟢 修正區塊：快速確認收租（含提前繳租與電費輸入） ================= -->
+    <!-- ================= 🟢 快速確認收租與提前繳租區塊 ================= -->
     <div class="card p-4 mb-4">
         <h4 class="section-title receipt">⚡ 快速確認收租 / 提前繳租登記</h4>
-        <p class="text-muted small">房客繳租時，在此選擇地區、房號並輸入當期電費，點擊確認即可。系統會自動記錄今天為繳租日，並將電費結算歸檔，本月到期時便不會再發催繳通知。</p>
+        <p class="text-muted small">請輸入地區、房號及當期收到的電費。根據房客繳交的期數，點選下方對應的確認按鈕：</p>
         
         <form id="receiptForm">
             <div class="row">
@@ -38,27 +39,37 @@
                 </div>
                 <div class="col-md-6 mb-3">
                     <label class="form-label fw-bold">🚪 輸入房號</label>
-                    <input type="text" class="form-control" id="receiptRoom" placeholder="例如：101、A房" required>
+                    <input type="text" class="form-control" id="receiptRoom" placeholder="例如：101" required>
                 </div>
             </div>
 
-            <!-- ✨ 補回電費欄位 -->
+            <!-- 電費輸入欄位 -->
             <div class="mb-3">
                 <label class="form-label fw-bold">⚡ 本期收到的電費 (元)</label>
                 <input type="number" class="form-control" id="receiptElectricity" value="0" min="0" required>
-                <div class="form-text text-muted">若本次不收電費或已內含，請維持 0。</div>
+                <div class="form-text text-muted">若本次未收到電費或已內含，請維持 0。</div>
             </div>
 
-            <button type="submit" class="btn btn-success w-100 py-2 fw-bold" id="receiptBtn">
-                🟢 確認收到此房間租金與電費
-            </button>
+            <!-- 功能分流按鈕：正常收租與提前收租 -->
+            <div class="row g-2">
+                <div class="col-6">
+                    <button type="button" class="btn btn-success w-100 py-2 fw-bold" id="btnNormal" onclick="submitReceipt('confirm_receipt')">
+                        🟢 正常收本月租金
+                    </button>
+                </div>
+                <div class="col-6">
+                    <button type="button" class="btn btn-warning w-100 py-2 fw-bold" id="btnAdvance" onclick="submitReceipt('advance_receipt')">
+                        ⏩ 登記提前繳租
+                    </button>
+                </div>
+            </div>
         </form>
     </div>
 
-    <!-- ================= 🔵 原有區塊：房客資料追加、修訂與新增 ================= -->
+    <!-- ================= 🔵 原有區塊：房客基本資料維護 ================= -->
     <div class="card p-4">
         <h4 class="section-title">📝 房客基本資料新增 / 修改</h4>
-        <p class="text-muted small">此區塊僅用於調整基本合約資料。若要登記每月的收租與當期電費，請使用上方綠色區塊。</p>
+        <p class="text-muted small">此區塊僅用於調整基本合約與基本資料。欲登記每月收租請用上方區塊。</p>
         
         <form id="tenantForm">
             <div class="row">
@@ -123,7 +134,11 @@
     function dispatchToGitHub(payloadData, buttonEl, successMsg) {
         const originalText = buttonEl.innerHTML;
         buttonEl.disabled = true;
-        buttonEl.innerHTML = `<span class="spinner-border spinner-border-sm"></span> 處理中，請稍候...`;
+        buttonEl.innerHTML = `<span class="spinner-border spinner-border-sm"></span>...`;
+
+        // 停用另一個按鈕防止重複點擊
+        const otherBtn = buttonEl.id === "btnNormal" ? document.getElementById("btnAdvance") : document.getElementById("btnNormal");
+        if (otherBtn) otherBtn.disabled = true;
 
         fetch(`https://api.github.com/repos/${GITHUB_USER}/${REPO_NAME}/dispatches`, {
             method: "POST",
@@ -139,7 +154,7 @@
         })
         .then(response => {
             if (response.status === 204 || response.ok) {
-                Swal.fire({ icon: 'success', title: '發送成功！', text: successMsg + ' 系統正在重新計算報表，約1分鐘後Telegram會更新。', confirmButtonColor: '#28a745' });
+                Swal.fire({ icon: 'success', title: '發送成功！', text: successMsg + ' 後台將自動重新處理報表，請於1分鐘後檢視結果。', confirmButtonColor: '#28a745' });
             } else {
                 Swal.fire({ icon: 'error', title: '發送失敗', text: `錯誤碼: ${response.status}，請檢查Token權限。` });
             }
@@ -150,27 +165,33 @@
         .finally(() => {
             buttonEl.disabled = false;
             buttonEl.innerHTML = originalText;
+            if (otherBtn) otherBtn.disabled = false;
         });
     }
 
-    // 表單一：處理「快速收租 / 提前繳租」
-    document.getElementById("receiptForm").addEventListener("submit", function(e) {
-        e.preventDefault();
+    // 處理收租表單提交（根據點選按鈕傳入不同 action_type）
+    function submitReceipt(actionType) {
         const loc = document.getElementById("receiptLocation").value;
         const rm = document.getElementById("receiptRoom").value.trim();
         const elec = document.getElementById("receiptElectricity").value;
-        const btn = document.getElementById("receiptBtn");
+        
+        if (!loc || !rm) {
+            Swal.fire({ icon: 'warning', title: '欄位未完整', text: '請先選擇地區並填寫房號！' });
+            return;
+        }
 
-        // 這裡會把當期輸入的電費同步帶過去給後台處存
+        const btn = actionType === "confirm_receipt" ? document.getElementById("btnNormal") : document.getElementById("btnAdvance");
+        const typeText = actionType === "confirm_receipt" ? "【正常收本月租金】" : "【登記提前繳租】";
+
         const data = {
-            action_type: "confirm_receipt",
+            action_type: actionType,
             location: loc,
             room: rm,
             electricity: parseInt(elec) || 0
         };
 
-        dispatchToGitHub(data, btn, `【${loc} - ${rm}】已成功登記本日收租，電費金額：${elec} 元！`);
-    });
+        dispatchToGitHub(data, btn, `${typeText} 訊號已發送！房間：${loc}-${rm}，電費金額：${elec} 元。`);
+    }
 
     // 表單二：處理「房客資料新增 / 修改」
     document.getElementById("tenantForm").addEventListener("submit", function(e) {
