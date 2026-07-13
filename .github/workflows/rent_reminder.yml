@@ -3,7 +3,8 @@ name: Daily Rent & Contract Reminder via Telegram
 on:
   workflow_dispatch:
   repository_dispatch:
-    types: [confirm_receipt, add_tenant]  # 🌟 規定外部只能用這兩個專屬暗號敲門
+    # 🌟 修正：加入 webhook_event 讓 GitHub 接收網頁發出的請求
+    types: [confirm_receipt, add_tenant, webhook_event] 
   schedule:
     - cron: '0 1 * * *'  
   issues:
@@ -11,7 +12,6 @@ on:
 
 jobs:
   check-and-notify:
-    # 🌟 取消舊的 issue 標籤限制，改成：只要是 n8n/網頁點擊、手動點擊、或是特定的 Issue，通通放行！
     if: |
       github.event_name == 'repository_dispatch' || 
       github.event_name == 'workflow_dispatch' || 
@@ -37,9 +37,7 @@ jobs:
       env:
         TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
         TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        # 🌟 如果是 Issue 觸發就帶入 Body，如果是 n8n 觸發則由 python 解析 client_payload（此處相容舊設定）
         ISSUE_BODY: ${{ github.event.issue.body }}
-        # 🌟 把 n8n 傳過來的資料袋也同步塞給環境變數，方便 Python 讀取
         CLIENT_PAYLOAD: ${{ toJson(github.event.client_payload) }}
       run: python main.py
 
@@ -54,7 +52,6 @@ jobs:
         fi
 
     - name: Close Issue
-      # 🌟 只在真的是 Issue 觸發的時候才跑關閉步驟，防止 n8n 觸發時這裡噴錯
       if: github.event_name == 'issues'
       uses: peter-evans/close-issue@v3
       with:
