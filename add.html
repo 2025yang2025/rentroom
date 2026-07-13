@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>房東管理系統 - 房客資料管理</title>
-    <!-- 引入美化排版與彈出視窗外掛 -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
@@ -12,10 +11,10 @@
         .card { border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
         .btn-primary { background-color: #007bff; border: none; }
         .btn-success { background-color: #28a745; border: none; }
-        .section-title { border-left: 5px solid #007bff; padding-left: 10px; margin-bottom: 20px; font-weight: bold; color: #333; }
         .config-panel { background-color: #e9ecef; border-radius: 8px; display: none; }
         .form-label { font-weight: bold; margin-bottom: 5px; }
         .highlight-group { background-color: #f0f4f8; padding: 15px; border-radius: 10px; border: 1px solid #d0e2ff; }
+        .electricity-badge { background-color: #fff3cd; color: #856404; padding: 5px 10px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; border: 1px solid #ffeeba; }
     </style>
 </head>
 <body>
@@ -29,7 +28,7 @@
 
 <div class="container py-2" style="max-width: 600px;">
 
-    <!-- 🔒 GitHub API 金鑰配置區塊 (預設隱藏) -->
+    <!-- 🔒 GitHub API 連線配置 (預設隱藏) -->
     <div id="configSection" class="card p-3 mb-4 config-panel">
         <h6 class="fw-bold text-secondary mb-2">🔒 GitHub API 連線配置</h6>
         <div class="row g-2">
@@ -44,64 +43,74 @@
         </div>
     </div>
 
-    <!-- ================= 📝 房客資料管理大表單 (對應你的精美截圖) ================= -->
+    <!-- ================= 📝 房客資料管理大表單 ================= -->
     <div class="card p-4 mb-4">
         <h4 class="text-center fw-bold mb-2">➕ 房客資料管理</h4>
         <p class="text-center text-muted small mb-4">💡 若要追加押金或更新電費，只需填寫地點、房號、姓名與欲修改的欄位即可！</p>
         
+        <!-- 頂部即時動態標題：例如 502 (杜佳威 / 8000元 / 繳租日: 10號) -->
+        <div id="dynamicTitle" class="alert alert-info text-center fw-bold d-none" style="font-size: 1.1rem;">
+            <!-- 由 JavaScript 動態填入 -->
+        </div>
+
         <form id="tenantForm" onsubmit="return false;">
             
-            <!-- 藍色核心必填群組 -->
+            <!-- 核心欄位群組 -->
             <div class="highlight-group mb-3">
                 <div class="mb-3">
                     <label class="form-label">📍 地點（如：台南）</label>
-                    <input type="text" class="form-control" id="location" placeholder="例如：永康、東區、中華西602" required>
+                    <input type="text" class="form-control" id="location" placeholder="例如：永康、東區、中華西602" required oninput="updateDynamicTitle()">
                 </div>
 
                 <div class="mb-3">
                     <label class="form-label">🚪 房間號碼（如：101房）</label>
-                    <input type="text" class="form-control" id="room" placeholder="例如：101" required>
+                    <input type="text" class="form-control" id="room" placeholder="例如：101" required oninput="updateDynamicTitle()">
                 </div>
 
                 <div class="mb-0">
                     <label class="form-label">👤 房客姓名</label>
-                    <input type="text" class="form-control" id="name" placeholder="例如：林淑藝">
+                    <input type="text" class="form-control" id="name" placeholder="例如：杜佳威" oninput="updateDynamicTitle()">
                 </div>
             </div>
 
-            <!-- 其他屬性欄位 -->
             <div class="mb-3">
                 <label class="form-label">💰 每月租金（不改不填）</label>
-                <input type="number" class="form-control" id="rent" placeholder="例如：6500">
+                <input type="number" class="form-control" id="rent" placeholder="例如：8000" oninput="updateDynamicTitle()">
+            </div>
+
+            <!-- 新增/調整：每月繳租日提前至上方，並與動態標題連動 -->
+            <div class="mb-3">
+                <label class="form-label">📅 每月繳租日（幾號繳租，不改不填）</label>
+                <input type="number" class="form-control" id="pay_day" min="1" max="31" placeholder="例如：10" oninput="updateDynamicTitle()">
+            </div>
+
+            <!-- 顯示與填寫當期電費 -->
+            <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <label class="form-label mb-0" style="color: #fd7e14;">⚡ 當期應繳電費（新抄表金額）</label>
+                    <span id="electricityDisplay" class="electricity-badge">目前填寫：0 元</span>
+                </div>
+                <input type="number" class="form-control" id="electricity" placeholder="例如：1250" value="0" oninput="updateElectricityDisplay()">
             </div>
 
             <div class="mb-3">
                 <label class="form-label">🔒 押金總額（追加/修改在此填新總額）</label>
-                <input type="number" class="form-control" id="deposit" placeholder="例如：13000">
+                <input type="number" class="form-control" id="deposit" placeholder="例如：16000">
             </div>
 
-            <div class="mb-3">
-                <label class="form-label" style="color: #fd7e14;">⚡ 當期應繳電費（新抄表金額）</label>
-                <input type="number" class="form-control" id="electricity" placeholder="例如：1250" value="0">
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">📅 每月繳租日（不改不填）</label>
-                <input type="number" class="form-control" id="pay_day" min="1" max="31" placeholder="例如：10">
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">📝 合約開始日（不改不填）</label>
-                <input type="date" class="form-control" id="contract_start">
-            </div>
-
-            <div class="mb-4">
-                <label class="form-label">⏳ 合約結束日（不改不填）</label>
-                <input type="date" class="form-control" id="contract_end">
+            <div class="row">
+                <div class="col-6 mb-3">
+                    <label class="form-label">📝 合約開始日</label>
+                    <input type="date" class="form-control" id="contract_start">
+                </div>
+                <div class="col-6 mb-3">
+                    <label class="form-label">⏳ 合約結束日</label>
+                    <input type="date" class="form-control" id="contract_end">
+                </div>
             </div>
 
             <!-- 🛠️ 底部完美整合：雙智慧按鈕 -->
-            <div class="row g-2">
+            <div class="row g-2 mt-2">
                 <div class="col-6">
                     <button type="button" class="btn btn-primary w-100 py-3 fw-bold" id="submitBtn" onclick="submitTenantData()">
                         🚀 儲存並同步至系統
@@ -118,28 +127,34 @@
     </div>
 </div>
 
-<!-- ========================================== -->
-<!-- 🪐 核心 JavaScript 自動化邏輯控制區區塊 -->
-<!-- ========================================== -->
 <script>
-    // 頁面加載完成後的初始化動作
+    // 網頁載入時的初始化與參數解析
     document.addEventListener("DOMContentLoaded", function() {
-        // 自動載入上次儲存的 GitHub 連線資訊
         if(localStorage.getItem("git_user")) document.getElementById("gitUser").value = localStorage.getItem("git_user");
         if(localStorage.getItem("git_repo")) document.getElementById("gitRepo").value = localStorage.getItem("git_repo");
         if(localStorage.getItem("git_token")) document.getElementById("gitToken").value = localStorage.getItem("git_token");
 
-        // 解析 Telegram 帶來的 URL 參數
+        // 解析 Telegram 帶來的網址參數
         const urlParams = new URLSearchParams(window.location.search);
         const tab = urlParams.get('tab');
         const pRoom = urlParams.get('room');
         const pLocation = urlParams.get('location');
+        const pName = urlParams.get('name');
+        const pRent = urlParams.get('rent');
+        const pPayDay = urlParams.get('pay_day');
         
-        // 1. 自動填入網址帶過來的 房號 與 地點
+        // 帶入網址參數
         if (pLocation) document.getElementById("location").value = pLocation;
         if (pRoom) document.getElementById("room").value = pRoom;
+        if (pName) document.getElementById("name").value = pName;
+        if (pRent) document.getElementById("rent").value = pRent;
+        if (pPayDay) document.getElementById("pay_day").value = pPayDay;
 
-        // 2. 智慧跳轉與聚焦：如果是提前繳租，直接幫房東聚焦在「電費欄位」並將畫面推到正中間
+        // 更新動態標題與電費顯示
+        updateDynamicTitle();
+        updateElectricityDisplay();
+
+        // 智慧聚焦：若是提前繳租，畫面直接推到電費輸入框並聚焦
         if (tab === 'advance') {
             const inputElectricity = document.getElementById("electricity");
             if (inputElectricity) {
@@ -149,22 +164,49 @@
         }
     });
 
-    // 控制設定面板的隱藏與顯示
+    // 🔄 顯示格式：502 (杜佳威 / 8000元 / 繳租日: 10號)
+    function updateDynamicTitle() {
+        const room = document.getElementById("room").value.trim();
+        const name = document.getElementById("name").value.trim();
+        const rent = document.getElementById("rent").value.trim();
+        const payDay = document.getElementById("pay_day").value.trim();
+        const titleDiv = document.getElementById("dynamicTitle");
+
+        if (room || name || rent || payDay) {
+            titleDiv.classList.remove("d-none");
+            let infoText = `${room || '❓房號'}`;
+            if (name || rent || payDay) {
+                infoText += ` (${name || '未填姓名'}`;
+                if (rent) infoText += ` / ${rent}元`;
+                if (payDay) infoText += ` / 繳租日: ${payDay}號`;
+                infoText += `)`;
+            }
+            titleDiv.innerText = infoText;
+        } else {
+            titleDiv.classList.add("d-none");
+        }
+    }
+
+    // ⚡ 即時更新電費小標籤顯示
+    function updateElectricityDisplay() {
+        const elec = document.getElementById("electricity").value;
+        document.getElementById("electricityDisplay").innerText = `目前填寫：${elec || 0} 元`;
+    }
+
     function toggleConfig() {
         const panel = document.getElementById("configSection");
         panel.style.display = (panel.style.display === "none" || panel.style.display === "") ? "block" : "none";
     }
 
-    // 儲存金鑰到瀏覽器內部
     function saveConfig() {
         localStorage.setItem("git_user", document.getElementById("gitUser").value.trim());
         localStorage.setItem("git_repo", document.getElementById("gitRepo").value.trim());
         localStorage.setItem("git_token", document.getElementById("gitToken").value.trim());
-        Swal.fire('成功', '連線金鑰已加密儲存於本機瀏覽器。', 'success');
+        Swal.fire('成功', '連線金鑰已儲存。', 'success');
         toggleConfig();
     }
 
-    // 萬用 GitHub Dispatch 派發核心函式
+    // 發送 API 給 GitHub 的核心函式
     function dispatchToGitHub(payloadData, buttonEl, successMsg) {
         const user = localStorage.getItem("git_user");
         const repo = localStorage.getItem("git_repo");
@@ -194,10 +236,9 @@
         })
         .then(response => {
             if(!response.ok) throw new Error(`錯誤代碼: ${response.status}`);
-            Swal.fire({ icon: 'success', title: '指令已成功送出！', text: successMsg + ' 請於 1 分鐘後確認 Telegram 財務總表。' });
-            
-            // 成功後重設電費為 0
+            Swal.fire({ icon: 'success', title: '指令已送出！', text: successMsg + ' 請於 1 分鐘後確認 Telegram 財務表。' });
             document.getElementById("electricity").value = "0";
+            updateElectricityDisplay();
         })
         .catch(err => {
             Swal.fire({ icon: 'error', title: '派發失敗', text: err.message });
@@ -208,13 +249,13 @@
         });
     }
 
-    // 動作 1：觸發「🚀 儲存並同步至系統」（新增修改房客資料）
+    // 按鈕一：🚀 儲存並同步至系統
     function submitTenantData() {
         const loc = document.getElementById("location").value.trim();
         const rm = document.getElementById("room").value.trim();
         
         if (!loc || !rm) {
-            Swal.fire({ icon: 'warning', title: '欄位未完整', text: '「地點」與「房間號碼」為核心必填欄位！' });
+            Swal.fire({ icon: 'warning', title: '欄位未完整', text: '「地點」與「房間號碼」為必填欄位！' });
             return;
         }
 
@@ -235,23 +276,19 @@
         dispatchToGitHub(data, btn, `【${loc}-${rm}】基本資料與合約修訂變更`);
     }
 
-    // 動作 2：觸發「⏩ 確認提前繳租」（完成當月收租與電費銷帳）
+    // 按鈕二：⏩ 確認提前繳租
     function submitAdvanceReceipt() {
         const loc = document.getElementById("location").value.trim();
         const rm = document.getElementById("room").value.trim();
         const elec = document.getElementById("electricity").value;
 
-        if (!loc) {
-            Swal.fire({ icon: 'warning', title: '欄位未填', text: '請填寫「地點」以便系統核對房間！' });
-            return;
-        }
-        if (!rm) {
-            Swal.fire({ icon: 'warning', title: '欄位未填', text: '請填寫「房間號碼」！' });
+        if (!loc || !rm) {
+            Swal.fire({ icon: 'warning', title: '欄位未填', text: '請確保填寫了「地點」與「房間號碼」！' });
             return;
         }
 
         const data = {
-            action_type: "advance_receipt", // 對應 Python 中的提前收租銷帳模組
+            action_type: "advance_receipt",
             location: loc,
             room: rm,
             electricity: parseInt(elec) || 0
