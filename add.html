@@ -20,37 +20,45 @@
 <div class="container py-4" style="max-width: 600px;">
     <h2 class="text-center mb-4 fw-bold text-secondary">👑 房東智慧管理後台</h2>
 
-    <!-- ================= 🟢 新增區塊：快速確認收租（含提前繳租） ================= -->
+    <!-- ================= 🟢 修正區塊：快速確認收租（含提前繳租與電費輸入） ================= -->
     <div class="card p-4 mb-4">
         <h4 class="section-title receipt">⚡ 快速確認收租 / 提前繳租登記</h4>
-        <p class="text-muted small">房客提早繳租時，直接在此選擇地點與房號，點擊確認即可。系統會自動記錄今天為繳租日，本月到期時便不會再發催繳通知。</p>
+        <p class="text-muted small">房客繳租時，在此選擇地區、房號並輸入當期電費，點擊確認即可。系統會自動記錄今天為繳租日，並將電費結算歸檔，本月到期時便不會再發催繳通知。</p>
         
         <form id="receiptForm">
-            <div class="mb-3">
-                <label class="form-label font-weight-bold">📍 選擇租屋地區</label>
-                <select class="form-select" id="receiptLocation" required>
-                    <option value="" disabled selected>請選擇地區...</option>
-                    <option value="永康">永康</option>
-                    <option value="東區">東區</option>
-                    <option value="安平">安平</option>
-                </select>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label fw-bold">📍 選擇租屋地區</label>
+                    <select class="form-select" id="receiptLocation" required>
+                        <option value="" disabled selected>請選擇地區...</option>
+                        <option value="永康">永康</option>
+                        <option value="東區">東區</option>
+                        <option value="安平">安平</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label fw-bold">🚪 輸入房號</label>
+                    <input type="text" class="form-control" id="receiptRoom" placeholder="例如：101、A房" required>
+                </div>
             </div>
 
+            <!-- ✨ 補回電費欄位 -->
             <div class="mb-3">
-                <label class="form-label">🚪 輸入/選擇房號</label>
-                <input type="text" class="form-select" id="receiptRoom" placeholder="例如：101、A房" required>
+                <label class="form-label fw-bold">⚡ 本期收到的電費 (元)</label>
+                <input type="number" class="form-control" id="receiptElectricity" value="0" min="0" required>
+                <div class="form-text text-muted">若本次不收電費或已內含，請維持 0。</div>
             </div>
 
             <button type="submit" class="btn btn-success w-100 py-2 fw-bold" id="receiptBtn">
-                🟢 確認收到此房間本月租金
+                🟢 確認收到此房間租金與電費
             </button>
         </form>
     </div>
 
     <!-- ================= 🔵 原有區塊：房客資料追加、修訂與新增 ================= -->
     <div class="card p-4">
-        <h4 class="section-title">📝 房客資料新增 / 修改</h4>
-        <p class="text-muted small">此區塊用於調整現有房客的租金、合約、電費欄位，或是新增全新房客（若房號已存在，則會直接覆蓋修訂該房客資料）。</p>
+        <h4 class="section-title">📝 房客基本資料新增 / 修改</h4>
+        <p class="text-muted small">此區塊僅用於調整基本合約資料。若要登記每月的收租與當期電費，請使用上方綠色區塊。</p>
         
         <form id="tenantForm">
             <div class="row">
@@ -79,14 +87,9 @@
                     <input type="number" class="form-control" id="rent" placeholder="例如: 6500" required>
                 </div>
                 <div class="col-md-6 mb-3">
-                    <label class="form-label">⚡ 當期電費</label>
-                    <input type="number" class="form-control" id="electricity" value="0">
+                    <label class="form-label">📅 每月繳租日（幾號）</label>
+                    <input type="number" class="form-control" id="pay_day" min="1" max="31" placeholder="例如: 10" required>
                 </div>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">📅 每月繳租日（幾號）</label>
-                <input type="number" class="form-control" id="pay_day" min="1" max="31" placeholder="例如: 10" required>
             </div>
 
             <div class="row">
@@ -155,15 +158,18 @@
         e.preventDefault();
         const loc = document.getElementById("receiptLocation").value;
         const rm = document.getElementById("receiptRoom").value.trim();
+        const elec = document.getElementById("receiptElectricity").value;
         const btn = document.getElementById("receiptBtn");
 
+        // 這裡會把當期輸入的電費同步帶過去給後台處存
         const data = {
             action_type: "confirm_receipt",
             location: loc,
-            room: rm
+            room: rm,
+            electricity: parseInt(elec) || 0
         };
 
-        dispatchToGitHub(data, btn, `【${loc} - ${rm}】收租確認訊號已送出！`);
+        dispatchToGitHub(data, btn, `【${loc} - ${rm}】已成功登記本日收租，電費金額：${elec} 元！`);
     });
 
     // 表單二：處理「房客資料新增 / 修改」
@@ -177,7 +183,6 @@
             room: document.getElementById("room").value.trim(),
             name: document.getElementById("name").value.trim(),
             rent: document.getElementById("rent").value,
-            electricity: document.getElementById("electricity").value,
             pay_day: document.getElementById("pay_day").value,
             contract_start: document.getElementById("contract_start").value,
             contract_end: document.getElementById("contract_end").value
