@@ -109,14 +109,14 @@
                 </div>
             </div>
 
-            <!-- 🛠️ 底部暴力強制並列雙按鈕 -->
-            <div class="row g-2 mt-3" style="display: flex !important; visibility: visible !important;">
-                <div class="col-6">
+            <!-- 🛠️ 底部智慧動態按鈕區塊 -->
+            <div class="row g-2 mt-3">
+                <div id="colSubmit" class="col-6">
                     <button type="button" class="btn btn-primary w-100 py-3 fw-bold fs-5 shadow-sm" id="submitBtn" onclick="submitTenantData()">
                         🚀 儲存變更並同步
                     </button>
                 </div>
-                <div class="col-6">
+                <div id="colAdvance" class="col-6">
                     <button type="button" class="btn btn-warning w-100 py-3 fw-bold fs-5 shadow-sm text-dark" id="btnAdvance" onclick="submitAdvanceReceipt()">
                         ⏩ 確認提前繳租
                     </button>
@@ -128,7 +128,6 @@
 </div>
 
 <script>
-    // 暴力自製網址參數解析器（防止因為網址多個問號或串接錯誤導致失效）
     function getQueryParam(paramName) {
         const url = window.location.href;
         const regex = new RegExp('[?&]' + paramName + '=([^&#]*)', 'i');
@@ -141,7 +140,6 @@
         if(localStorage.getItem("git_repo")) document.getElementById("gitRepo").value = localStorage.getItem("git_repo");
         if(localStorage.getItem("git_token")) document.getElementById("gitToken").value = localStorage.getItem("git_token");
 
-        // 使用超強防禦解析器獲取參數
         const pLocation = getQueryParam('location');
         const pRoom = getQueryParam('room');
         const pName = getQueryParam('name');
@@ -157,42 +155,40 @@
         updateDynamicTitle();
         updateElectricityDisplay();
 
-        // ─── 超級暴力網址字串直接掃描判定 ───
+        // ─── 按鈕動態大變身邏輯 ───
         const submitBtn = document.getElementById("submitBtn");
-        const btnAdvance = document.getElementById("btnAdvance");
+        const colSubmit = document.getElementById("colSubmit");
+        const colAdvance = document.getElementById("colAdvance");
         const fullUrlLower = window.location.href.toLowerCase();
         
-        // 只要網址裡面有包含這幾個關鍵字，直接強制判定，絕不依賴瀏覽器 URLSearchParams
         const isConfirm = fullUrlLower.includes('confirm');
         const isAdvance = fullUrlLower.includes('advance');
         
-        if (submitBtn && btnAdvance) {
-            if (isConfirm) {
-                // 正常收租狀態
-                submitBtn.className = "btn btn-success w-100 py-3 fw-bold fs-5 shadow-sm";
-                submitBtn.innerHTML = "🟢 確認正常收租";
-                submitBtn.setAttribute("onclick", "submitNormalReceipt()");
-                btnAdvance.className = "btn btn-secondary w-100 py-3 fw-bold opacity-50"; 
-            } else if (isAdvance) {
-                // 提前繳租狀態
-                submitBtn.className = "btn btn-secondary w-100 py-3 fw-bold opacity-50";
-                submitBtn.innerHTML = "💡 目前為提前繳租";
-                submitBtn.setAttribute("onclick", "Swal.fire('提示', '目前為提前繳租模式，請點擊右邊黃色按鈕送出！', 'info')");
-                btnAdvance.className = "btn btn-warning w-100 py-3 fw-bold fs-5 shadow-sm text-dark";
-                
-                // 自動聚焦到電費
-                const inputElectricity = document.getElementById("electricity");
-                if (inputElectricity) {
-                    inputElectricity.focus();
-                    inputElectricity.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            } else {
-                // 預設純修改資料狀態
-                submitBtn.className = "btn btn-primary w-100 py-3 fw-bold fs-5 shadow-sm";
-                submitBtn.innerHTML = "🚀 儲存變更並同步";
-                submitBtn.setAttribute("onclick", "submitTenantData()");
-                btnAdvance.className = "btn btn-warning w-100 py-3 fw-bold fs-5 shadow-sm text-dark";
+        if (isConfirm) {
+            // 【確認正常收租】模式：讓左邊按鈕變綠色，右邊變灰色隱形
+            colSubmit.className = "col-12"; // 放大成滿版
+            colAdvance.style.display = "none"; // 隱藏原本的右邊按鈕
+            submitBtn.className = "btn btn-success w-100 py-3 fw-bold fs-5 shadow-sm";
+            submitBtn.innerHTML = "🟢 確認正常收租";
+            submitBtn.setAttribute("onclick", "submitNormalReceipt()");
+        } else if (isAdvance) {
+            // 【提前繳租】模式：讓左邊按鈕直接「變身」成黃色的提前繳租按鈕！右邊隱藏！
+            colSubmit.className = "col-12"; // 放大成滿版
+            colAdvance.style.display = "none"; // 隱藏右邊
+            submitBtn.className = "btn btn-warning w-100 py-3 fw-bold fs-5 shadow-sm text-dark";
+            submitBtn.innerHTML = "⏩ 確認提前繳租";
+            submitBtn.setAttribute("onclick", "submitAdvanceReceipt()");
+            
+            // 自動聚焦電費欄位
+            const inputElectricity = document.getElementById("electricity");
+            if (inputElectricity) {
+                inputElectricity.focus();
+                inputElectricity.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
+        } else {
+            // 預設【純修改資料】模式：維持原狀（兩個按鈕並列）
+            colSubmit.className = "col-6";
+            colAdvance.style.display = "block";
         }
     });
 
@@ -331,7 +327,7 @@
             room: rm,
             electricity: parseInt(elec) || 0
         };
-        dispatchToGitHub(data, document.getElementById("btnAdvance"), `【${loc}-${rm}】房客提前繳租銷帳成功！`);
+        dispatchToGitHub(data, document.getElementById("submitBtn"), `【${loc}-${rm}】房客提前繳租銷帳成功！`);
     }
 </script>
 </body>
