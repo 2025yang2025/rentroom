@@ -52,20 +52,21 @@ def handle_web_dispatch():
     def clean_str(s):
         return "".join(str(s).split()).replace("房", "").lower()
 
-    # ─── 分流 A：確認收到租金（含每月電費存檔） ───
-    if action_type == "confirm_receipt":
+    # ─── 分流 A：確認收到租金（支援正常收租與提前繳租） ───
+    if action_type in ["confirm_receipt", "advance_receipt"]:
         room = str(payload.get("room", "")).strip()
         location = str(payload.get("location", "")).strip()
         today_str = date.today().strftime("%Y-%m-%d")
         this_month_key = today_str[:7]
         
-        # 💡 優化點：如果網頁傳進來的 payload 有帶最新電費，優先採用網頁的；否則採用原本 JSON 的
         web_elec = payload.get("electricity")
         
-        print(f"▶ 執行【收租確認】: {location} - {room}")
+        mode_text = "正常收租" if action_type == "confirm_receipt" else "提前繳租"
+        print(f"▶ 執行【{mode_text}確認】: {location} - {room}")
         updated = False
         for t in tenants:
             if clean_str(t.get("room", "")) == clean_str(room) and clean_str(t.get("location", "")) == clean_str(location):
+                # 關鍵邏輯：無論是提早還是當天，只要登記了，就將最後繳租日設為今天（例如：2026-07-05）
                 t["last_paid_date"] = today_str
                 
                 # 確定本月最終要歸檔的電費金額
@@ -124,26 +125,6 @@ def handle_web_dispatch():
             tenants.append(new_tenant)
             print(f"✅ 全新房客 {name} 登記成功！")
 
-    # ─── 分流 C：辦理租客續約 ───
-    elif action_type == "renew_contract":
-        room = str(payload.get("room", "")).strip()
-        location = str(payload.get("location", "")).strip()
-        
-        print(f"▶ 執行【房客續約展延】: {location} - {room}")
-        updated = False
-        for t in tenants:
-            if clean_str(t.get("room", "")) == clean_str(room) and clean_str(t.get("location", "")) == clean_str(location):
-                t["rent"] = int(payload.get("rent", 0))
-                if payload.get("deposit") is not None: t["deposit"] = int(payload.get("deposit"))
-                t["contract_start"] = payload.get("contract_start")
-                t["contract_end"] = payload.get("contract_end")
-                t["last_paid_date"] = ""
-                updated = True
-                print(f"✅ 成功幫房客 {t['name']} 展延合約。")
-                break
-        if not updated:
-            print(f"⚠️ 找不到對應房間無法續約：{location} {room}")
-
     else:
         print(f"⚠️ 未知的網頁動作: {action_type}")
         return True
@@ -163,10 +144,9 @@ def check_tenants_and_notify():
         return
 
     has_notification = False
-    vacant_rooms = []  # 收集待租空房的清單
+    vacant_rooms = []
 
     for t in tenants:
-        # 🧾【待租房隔離】：如果是空房，直接加入空房清單並跳過所有催繳/通知流程
         if int(t.get('rent') or 0) == 0 or t.get('name') == "待租":
             vacant_rooms.append(t)
             continue
@@ -179,8 +159,10 @@ def check_tenants_and_notify():
             elec_amount = t.get('electricity', 0)
             elec_text = f" + ⚡ 電費:{elec_amount}元" if elec_amount > 0 else ""
 
-            # ─ 1. 當天提醒與未繳持續催繳（已移除3天前預告） ─
+            # 💡【核心邏輯】：檢查「最後繳租日」的年月份
             last_paid_ym = t.get('last_paid_date', '')[:7] if t.get('last_paid_date') else ""
+            
+            # 如果今天日期大於等於房客的繳租日，且「這個月還沒繳過租金」才觸發提醒
             if today.day >= t['pay_day'] and last_paid_ym != current_year_month:
                 status_label = "📅 <b>【今日繳租提醒】</b>" if today.day == t['pay_day'] else "🚨 ⚠️ <b>【未收租催繳】</b>"
                 reminders.append(
@@ -192,34 +174,11 @@ def check_tenants_and_notify():
                 )
                 buttons.append([
                     {
-                        "text": f"🟢 確認收到 {t['name']} 租金" + (f"(含電費)" if elec_amount > 0 else ""), 
-                        "url": f"https://2025yang2025.github.io/rent-form/confirm.html?room={t['room']}&location={t['location']}"
+                        "text": f"🟢 確認收到 {t['name']} 租金", 
+                        "url": f"https://2025yang2025.github.io/rent-form/index.html?action=confirm&room={t['room']}&location={t['location']}"
                     }
                 ])
 
-            # ─ 2. 檢查租約到期 ─
-            try:
-                if t.get('contract_end'):
-                    contract_end_date = datetime.strptime(t['contract_end'], '%Y-%m-%d')
-                    days_to_contract_end = (contract_end_date - today).days
-                    if 0 <= days_to_contract_end <= 30:
-                        reminders.append(
-                            f"{loc_room}\n"
-                            f"👤 房客：{t['name']}\n"
-                            f"📝 狀態：⏳ <b>【租約即將到期】</b>\n"
-                            f"📅 合約期間：{t['contract_start']} ~ <b>{t['contract_end']}</b>\n"
-                            f"💡 提示：合約剩餘 <b>{days_to_contract_end}</b> 天，請準備連繫續約。"
-                        )
-                        buttons.append([
-                            {
-                                "text": f"📝 辦理 {t['name']} 續約展延", 
-                                "url": f"https://2025yang2025.github.io/rent-form/renew.html?room={t['room']}&location={t['location']}"
-                            }
-                        ])
-            except Exception:
-                pass
-
-            # ─ 3. 發送單一房客通知 ─
             if reminders:
                 has_notification = True
                 message_text = "\n".join(reminders)
@@ -232,26 +191,10 @@ def check_tenants_and_notify():
                 if buttons:
                     payload["reply_markup"] = {"inline_keyboard": buttons}
                 
-                res = requests.post(url, json=payload)
-                if res.status_code != 200:
-                    print(f"❌ Telegram 發送失敗 [{t.get('location')}-{t.get('room')}]: {res.text}")
-                else:
-                    print(f"🔔 已成功發送 [{t.get('location')}-{t.get('room')}] 的通知至 Telegram。")
+                requests.post(url, json=payload)
 
         except Exception as room_error:
-            print(f"💥 處理房間 [{t.get('location')}-{t.get('room')}] 時發生非預期錯誤: {room_error}")
-
-    # ─── 獨立發送待租空房訊息 ───
-    if vacant_rooms:
-        sorted_vacant = sorted(vacant_rooms, key=lambda x: (x.get('location', ''), get_room_number_key(x)))
-        vacant_lines = [f"🚪 <b>{v.get('location')} - {v.get('room')}</b> (目前待租中)" for v in sorted_vacant]
-        
-        vacant_message = "🔍 <b>【物件招租廣播】</b>\n\n" + "\n".join(vacant_lines) + "\n\n💡 記得定時更新各大租屋平台的廣告喔！"
-        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-        
-        res = requests.post(url, json={"chat_id": chat_id, "text": vacant_message, "parse_mode": "HTML"})
-        if res.status_code == 200:
-            print("📢 已成功發送待租空房名單至 Telegram！")
+            print(f"💥 處理房間 [{t.get('location')}-{t.get('room')}] 時發生錯誤: {room_error}")
 
     if not has_notification:
         print("🎉 檢查完畢：今日無任何房客需要催繳！")
@@ -266,7 +209,6 @@ def send_main_menu():
 
     location_stats = {}
     for t in tenants:
-        # ✨【過濾核心】：如果是待租空房，完全不進入財務統計與房客名冊
         if int(t.get('rent') or 0) == 0 or t.get('name') == "待租":
             continue
 
@@ -282,10 +224,8 @@ def send_main_menu():
         
         location_stats[loc]["raw_tenants_list"].append(t)
         
-        elec_amount = t.get('electricity', 0)
         history = t.get('electricity_history', {})
         collected_elec_this_month = history.get(current_year_month, 0)
-        
         last_paid_ym = t.get('last_paid_date', '')[:7] if t.get('last_paid_date') else ""
         
         if last_paid_ym == current_year_month:
@@ -297,76 +237,40 @@ def send_main_menu():
             location_stats[loc]["total_collected_elec"] += collected_elec_this_month
             location_stats[loc]["elec_detail_list"].append((t, collected_elec_this_month))
 
-    # ─── A 區塊：分區財務報表組裝 ───
     finance_text = f"📊 <b>【{current_year_month} 月收租分區財務報表】</b>\n"
     if location_stats:
         for loc, stats in location_stats.items():
             sorted_paid_objs = sorted(stats["paid_raw_tenants"], key=get_room_number_key)
             sorted_unpaid_objs = sorted(stats["unpaid_raw_tenants"], key=get_room_number_key)
-            sorted_elec_tuples = sorted(stats["elec_detail_list"], key=lambda x: get_room_number_key(x[0]))
             
             exp_r = sum(t.get('rent', 0) for t in stats["raw_tenants_list"])
             recv_r = sum(t.get('rent', 0) for t in stats["paid_raw_tenants"])
             progress = round((recv_r / exp_r) * 100 if exp_r > 0 else 0, 1)
             
-            paid_lines = []
-            for t in sorted_paid_objs:
-                e_amt = t.get('electricity', 0)
-                e_str = f" + ⚡當期電費:{e_amt}元" if e_amt > 0 else ""
-                paid_lines.append(f"🟢 {t.get('room','')} ({t.get('name','')} / {t.get('rent',0)}元{e_str})")
+            paid_lines = [f"🟢 {t.get('room','')} ({t.get('name','')} / {t.get('rent',0)}元)" for t in sorted_paid_objs]
             paid_summary = "\n   ".join(paid_lines) if paid_lines else "   <i>暫無</i>"
             
-            unpaid_lines = []
-            for t in sorted_unpaid_objs:
-                e_amt = t.get('electricity', 0)
-                e_str = f" + ⚡當期電費:{e_amt}元" if e_amt > 0 else ""
-                unpaid_lines.append(f"🔴 {t.get('room','')} ({t.get('name','')} / {t.get('rent',0)}元{e_str})")
+            unpaid_lines = [f"🔴 {t.get('room','')} ({t.get('name','')} / {t.get('rent',0)}元)" for t in sorted_unpaid_objs]
             unpaid_summary = "\n   ".join(unpaid_lines) if unpaid_lines else "   <i>✨ 全數繳齊！</i>"
-            
-            elec_total = stats["total_collected_elec"]
-            elec_lines = [f"⚡ {item[0].get('room','')}: {item[1]} 元" for item in sorted_elec_tuples]
-            elec_summary = "\n   ".join(elec_lines) if elec_lines else "   <i>暫無實收電費紀錄</i>"
             
             finance_text += (
                 f"=====================\n"
                 f"📍 <b>【{loc}地區】財務統計</b>\n"
                 f"💰 實收租金：<b>{recv_r}</b> / {exp_r} 元\n"
-                f"📈 租金進度：<code>{progress}%</code>\n"
-                f"🔌 <b>本月實收電費總計：<u>{elec_total} 元</u></b>\n"
-                f"   {elec_summary}\n\n"
-                f"✅ <b>已收租房間 (依房號排序)：</b>\n   {paid_summary}\n"
-                f"⚠️ <b>未收租房間 (依房號排序)：</b>\n   {unpaid_summary}\n"
+                f"📈 租金進度：<code>{progress}%</code>\n\n"
+                f"✅ <b>已收租房間：</b>\n   {paid_summary}\n"
+                f"⚠️ <b>未收租房間：</b>\n   {unpaid_summary}\n"
             )
-    else:
-        finance_text += "=====================\n<i>目前暫無實質房客財務資料。</i>"
 
-    # ─── B 區塊：完整名冊排序 (已排除空房) ───
-    tenant_list_text = ""
-    if location_stats:
-        for loc, stats in location_stats.items():
-            tenant_list_text += f"🏠 <b>【{loc}地區名冊】</b>\n"
-            
-            sorted_room_list = sorted(stats["raw_tenants_list"], key=get_room_number_key)
-            for idx, t in enumerate(sorted_room_list, 1):
-                last_pay = t.get('last_paid_date')
-                last_pay_show = f"<code>{last_pay}</code>" if last_pay else "<i>無紀錄</i>"
-                deposit_show = f"{t.get('deposit', 0)}"
-                elec_current = t.get('electricity', 0)
-                
-                tenant_list_text += (
-                    f"  {idx}. 🚪 <b>{t['room']}</b> - {t['name']}\n"
-                    f"     💰 租金：{t['rent']} 元 ({t.get('pay_day', 1)}號繳)\n"
-                    f"     🔒 押金：{deposit_show} 元\n"
-                    f"     ⚡ 待繳電費：{elec_current} 元\n"
-                    f"     ⏳ 到期日：{t['contract_end']}\n"
-                    f"     📅 上次對帳：{last_pay_show}\n"
-                    f"  -----------------\n"
-                )
-            tenant_list_text += "=====================\n"
-    else:
-        tenant_list_text = "<i>目前系統內無任何有效房客資料。</i>\n=====================\n"
+    # ─── 📊 這裡修改為雙按鈕並列的 Inline Keyboard ───
+    # 點選「➕ 填寫新房客資料」會開啟新增面板；點選「⏩ 房客提前繳租」會自動切換到提前繳租選單。
+    inline_buttons = [
+        [
+            {"text": "➕ 填寫新房客資料", "url": "https://2025yang2025.github.io/rent-form/index.html?tab=tenant"},
+            {"text": "⏩ 房客提前繳租", "url": "https://2025yang2025.github.io/rent-form/index.html?tab=advance"}
+        ]
+    ]
 
-    # ─── C 區塊：發送 Telegram 訊息 ───
     menu_message = f"👑 <b>房東管理主選單</b>\n\n{finance_text}\n=====================\n📋 <b>下方可前往網頁操作：</b>"
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     
@@ -374,24 +278,13 @@ def send_main_menu():
         "chat_id": chat_id,
         "text": menu_message,
         "parse_mode": "HTML",
-        "reply_markup": {
-            "inline_keyboard": [[{"text": "➕ 填寫新房客資料 (前往網頁)", "url": "https://2025yang2025.github.io/rent-form/add.html"}]]
-        }
+        "reply_markup": {"inline_keyboard": inline_buttons}
     }
     requests.post(url, json=payload_menu)
 
-    list_message = f"📋 <b>系統內現存【分區排序房客名冊】</b>\n(已自動隱藏待租空房)\n=====================\n{tenant_list_text}"
-    requests.post(url, json={"chat_id": chat_id, "text": list_message, "parse_mode": "HTML"})
-
 
 if __name__ == "__main__":
-    print("🚀 開始執行房東管理系統...")
     is_web_signal = handle_web_dispatch()
-    
     if not is_web_signal:
-        print("⏰ 偵測到定時排程，開始執行每日房客狀態檢查...")
         check_tenants_and_notify()
-        send_main_menu()
-    else:
-        print("🏁 網頁資料處理完畢，已跳過每日催繳通知，正在更新 Telegram 主選單...")
-        send_main_menu()
+    send_main_menu()
