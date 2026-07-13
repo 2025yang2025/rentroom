@@ -48,7 +48,7 @@
         "contract_end": "2027-07-09",
         "last_paid_date": "2026-07-13",
         "deposit": 18000,
-        "electricity": 0,
+        "electricity": 1390,
         "electricity_history": {
             "2026-07": 1387
         }
