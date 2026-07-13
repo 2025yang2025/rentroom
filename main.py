@@ -66,7 +66,7 @@ def handle_web_dispatch():
         updated = False
         for t in tenants:
             if clean_str(t.get("room", "")) == clean_str(room) and clean_str(t.get("location", "")) == clean_str(location):
-                # 關鍵邏輯：無論是提早還是當天，只要登記了，就將最後繳租日設為今天（例如：2026-07-05）
+                # 銷帳關鍵：設定最後繳租日為今天
                 t["last_paid_date"] = today_str
                 
                 # 確定本月最終要歸檔的電費金額
@@ -76,7 +76,7 @@ def handle_web_dispatch():
                     t["electricity_history"] = {}
                 
                 t["electricity_history"][this_month_key] = elec_amount
-                t["electricity"] = 0 # 收齊後，待繳電費歸零
+                t["electricity"] = 0 # 收齊後，當期應繳電費歸零
                 updated = True
                 print(f"✅ 更新最後繳租日為 {today_str}，本月電費 {elec_amount} 元已歸檔並歸零。")
                 break
@@ -158,30 +158,33 @@ def check_tenants_and_notify():
             
             elec_amount = t.get('electricity', 0)
             elec_text = f" + ⚡ 電費:{elec_amount}元" if elec_amount > 0 else ""
+            p_day = t.get('pay_day', 1)
 
             # 💡 檢查「最後繳租日」的年月份
             last_paid_ym = t.get('last_paid_date', '')[:7] if t.get('last_paid_date') else ""
             
             # 如果今天日期大於等於房客的繳租日，且「這個月還沒繳過租金」才觸發提醒
-            if today.day >= t['pay_day'] and last_paid_ym != current_year_month:
-                status_label = "📅 <b>【今日繳租提醒】</b>" if today.day == t['pay_day'] else "🚨 ⚠️ <b>【未收租催繳】</b>"
+            if today.day >= p_day and last_paid_ym != current_year_month:
+                status_label = f"📅 <b>【今日繳租提醒 (每月 {p_day} 日)】</b>" if today.day == p_day else f"🚨 ⚠️ <b>【未收租催繳 (逾期)】</b>"
                 reminders.append(
                     f"{loc_room}\n"
-                    f"👤 房客：{t['name']}\n"
+                    f"👤 房客：{t['name']} (每月 {p_day} 日繳租)\n"
                     f"💡 狀態：{status_label} 尚未登記 {current_year_month} 月款項！\n"
                     f"💰 應繳金額：租金 {t['rent']} 元{elec_text}\n"
                     f"📅 上次付款日：<code>{t.get('last_paid_date') or '無紀錄'}</code>"
                 )
                 
-                # 催繳通知附帶雙功能按鈕，並傳遞該房客的參數直連 add.html
+                # 建立攜帶完整房客資訊的小尾巴網址，讓網頁頂部顯示動態精美標題
+                base_url = f"https://2025yang2025.github.io/rent-form/add.html?tab=advance&location={t['location']}&room={t['room']}&name={t['name']}&rent={t['rent']}&pay_day={p_day}"
+                
                 buttons.append([
                     {
                         "text": f"🟢 正常收租 ({t['name']})", 
-                        "url": f"https://2025yang2025.github.io/rent-form/add.html?tab=advance&action=confirm&room={t['room']}&location={t['location']}"
+                        "url": f"{base_url}&action=confirm"
                     },
                     {
                         "text": f"⏩ 提前繳租 ({t['name']})", 
-                        "url": f"https://2025yang2025.github.io/rent-form/add.html?tab=advance&action=advance&room={t['room']}&location={t['location']}"
+                        "url": f"{base_url}&action=advance"
                     }
                 ])
 
@@ -253,10 +256,21 @@ def send_main_menu():
             recv_r = sum(t.get('rent', 0) for t in stats["paid_raw_tenants"])
             progress = round((recv_r / exp_r) * 100 if exp_r > 0 else 0, 1)
             
-            paid_lines = [f"🟢 {t.get('room','')} ({t.get('name','')} / {t.get('rent',0)}元)" for t in sorted_paid_objs]
+            # 🟢 已收租名單加強版顯示：房號 (姓名 / 租金 / 繳租日 / 已繳電費)
+            paid_lines = []
+            for t in sorted_paid_objs:
+                hist = t.get('electricity_history', {})
+                c_elec = hist.get(current_year_month, 0)
+                elec_str = f" / ⚡電費:{c_elec}元" if c_elec > 0 else ""
+                paid_lines.append(f"🟢 {t.get('room','')} ({t.get('name','')} / {t.get('rent',0)}元 / 繳租日:{t.get('pay_day',1)}號{elec_str})")
             paid_summary = "\n   ".join(paid_lines) if paid_lines else "   <i>暫無</i>"
             
-            unpaid_lines = [f"🔴 {t.get('room','')} ({t.get('name','')} / {t.get('rent',0)}元)" for t in sorted_unpaid_objs]
+            # 🔴 未收租名單加強版顯示：房號 (姓名 / 租金 / 繳租日 / 當期應繳電費)
+            unpaid_lines = []
+            for t in sorted_unpaid_objs:
+                curr_elec = t.get('electricity', 0)
+                elec_str = f" / ⚡未繳電費:{curr_elec}元" if curr_elec > 0 else ""
+                unpaid_lines.append(f"🔴 {t.get('room','')} ({t.get('name','')} / {t.get('rent',0)}元 / 繳租日:{t.get('pay_day',1)}號{elec_str})")
             unpaid_summary = "\n   ".join(unpaid_lines) if unpaid_lines else "   <i>✨ 全數繳齊！</i>"
             
             finance_text += (
@@ -268,7 +282,7 @@ def send_main_menu():
                 f"⚠️ <b>未收租房間：</b>\n   {unpaid_summary}\n"
             )
 
-    # ─── 📊 總表下方的常駐主功能雙按鈕（直連對應至 add.html） ───
+    # ─── 主選單下方的功能按鈕群（直連對應至最新的 add.html） ───
     inline_buttons = [
         [
             {"text": "➕ 填寫新房客資料", "url": "https://2025yang2025.github.io/rent-form/add.html?tab=tenant"},
