@@ -11,19 +11,19 @@
         body { background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         .container { max-width: 500px; }
         .card { border: none; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
-        .highlight-group { background-color: #f0f7ff; padding: 16px; border-radius: 14px; border: 1px solid #e0effe; transition: all 0.3s; }
+        .highlight-group { background-color: #f0f7ff; padding: 16px; border-radius: 14px; border: 1px solid #e0effe; transition: all 0.2s; }
         .form-label { font-weight: 600; color: #334155; margin-bottom: 6px; font-size: 0.95rem; }
         .form-control { border-radius: 10px; padding: 10px 14px; border: 1px solid #cbd5e1; }
         .form-control:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
         .btn-custom { border-radius: 12px; padding: 12px; font-weight: 600; font-size: 1rem; transition: all 0.2s; }
         
         /* 模式切換按鈕區 */
-        .mode-container { background-color: #f1f5f9; padding: 6px; border-radius: 12px; display: flex; gap: 6px; }
-        .mode-btn { flex: 1; border: none; background: none; padding: 8px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; color: #64748b; transition: all 0.2s; }
+        .mode-container { background-color: #e2e8f0; padding: 6px; border-radius: 12px; display: flex; gap: 6px; }
+        .mode-btn { flex: 1; border: none; background: none; padding: 10px; border-radius: 8px; font-weight: 700; font-size: 0.95rem; color: #475569; transition: all 0.2s; }
         .mode-btn.active-normal { background-color: #10b981; color: white; }
         .mode-btn.active-advance { background-color: #f59e0b; color: #1e293b; }
         
-        .bg-advance-mode { background-color: #fffbeb; border: 1px solid #fef3c7; }
+        .bg-advance-mode { background-color: #fffbeb !important; border: 1px solid #fef3c7 !important; }
         .config-panel { background-color: #f1f5f9; border-radius: 12px; display: none; }
     </style>
 </head>
@@ -52,7 +52,7 @@
     <!-- 主卡片區域 -->
     <div class="card p-4">
         
-        <!-- 頂部功能模式切換區 -->
+        <!-- 🎯 頂部功能模式切換區 -->
         <div class="mode-container mb-4">
             <button type="button" id="btnTabNormal" class="mode-btn active-normal" onclick="switchMode('normal')">🟢 當期正常收租</button>
             <button type="button" id="btnTabAdvance" class="mode-btn" onclick="switchMode('advance')">⏩ 房客提前繳租</button>
@@ -80,12 +80,13 @@
                 </div>
             </div>
 
-            <!-- 💰 租金區塊 -->
+            <!-- 💰 提前繳租實收金額 (預設隱藏) -->
             <div class="mb-3 d-none p-3 rounded" id="advanceRentArea" style="background-color: #fffbeb; border: 1px solid #fef3c7;">
                 <label class="form-label text-danger fw-bold">💰 本次【提前繳租】實收租金金額</label>
                 <input type="number" class="form-control border-warning" id="advanceRentInput" placeholder="請輸入房客本次繳納的租金">
             </div>
 
+            <!-- 💰 原本的每月租金欄位 -->
             <div class="mb-3" id="normalRentArea">
                 <label class="form-label">💰 每月租金 (不改不填)</label>
                 <input type="number" class="form-control" id="rent" oninput="updateDynamicTitle()">
@@ -155,9 +156,13 @@
         if (getQueryParam('location')) document.getElementById("location").value = getQueryParam('location');
         if (getQueryParam('room')) document.getElementById("room").value = getQueryParam('room');
         
-        const tabParam = getQueryParam('tab');
-        if (tabParam === 'advance' || getQueryParam('action') === 'advance') {
+        // ✨ 重大修復：同時精準支援 Python 傳進來的 tab=advance 與 action=advance 參數
+        const targetTab = getQueryParam('tab');
+        const targetAction = getQueryParam('action');
+        if (targetTab === 'advance' || targetAction === 'advance') {
             switchMode('advance');
+        } else {
+            switchMode('normal');
         }
 
         fetchLatestTenantsJSON();
@@ -273,7 +278,6 @@
 
         if(!user || !repo || !token) {
             Swal.fire({ icon: 'error', title: '缺少連線配置', text: '請點擊右上角⚙️設定連線資訊！' });
-            toggleConfig();
             return;
         }
 
