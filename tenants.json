@@ -24,7 +24,7 @@
         "contract_end": "2026-12-31",
         "last_paid_date": "2026-07-01",
         "deposit": 14000,
-         "electricity_history": {
+        "electricity_history": {
             "2026-07": 1770
         },
         "electricity": 1770
@@ -39,7 +39,7 @@
         "contract_end": "2026-09-30",
         "last_paid_date": "2026-07-01",
         "deposit": 16000,
-         "electricity_history": {
+        "electricity_history": {
             "2026-07": 1555
         },
         "electricity": 1555
@@ -165,7 +165,7 @@
         "contract_end": "2027-05-30",
         "last_paid_date": "2026-07-01",
         "deposit": 30000,
-         "electricity_history": {
+        "electricity_history": {
             "2026-07": 1560
         },
         "electricity": 1560
