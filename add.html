@@ -45,8 +45,8 @@
 
     <!-- ================= 📝 房客資料與財務管理表單 ================= -->
     <div class="card p-4 mb-4">
-        <h4 class="text-center fw-bold mb-2">➕ 房客資料管理</h4>
-        <p class="text-center text-muted small mb-4">💡 提示：若僅需更新電費或確認收租，填寫地點、房號與電費即可點擊下方對應按鈕送出。</p>
+        <h4 class="text-center fw-bold mb-2">➕ 房客資料與財務管理</h4>
+        <p class="text-center text-muted small mb-4">💡 填寫「地點、房號」為核心必填，再依據您的目的點擊最下方對應的彩色功能按鈕送出即可。</p>
         
         <!-- 頂部即時動態標題 -->
         <div id="dynamicTitle" class="alert alert-info text-center fw-bold d-none" style="font-size: 1.1rem;"></div>
@@ -106,11 +106,24 @@
                 </div>
             </div>
 
-            <!-- 🛠️ 底部暴力單一智慧變身按鈕 -->
-            <div class="row mt-3">
+            <!-- 🛠️ 底部功能按鈕區塊（全部平鋪，一目了然） -->
+            <div class="row g-2 mt-3">
+                <!-- 1. 正常當期收租 (綠色大按鈕) -->
                 <div class="col-12">
-                    <button type="button" class="btn btn-primary w-100 py-3 fw-bold fs-5 shadow-sm" id="submitBtn" onclick="submitTenantData()">
-                        🚀 儲存變更並同步至系統
+                    <button type="button" class="btn btn-success w-100 py-3 fw-bold fs-5 shadow-sm text-white" id="btnNormal" onclick="submitNormalReceipt()">
+                        🟢 確認正常當期收租 (送出銷帳)
+                    </button>
+                </div>
+                <!-- 2. 提前繳租銷帳 (黃色大按鈕) -->
+                <div class="col-12">
+                    <button type="button" class="btn btn-warning w-100 py-3 fw-bold fs-5 shadow-sm text-dark" id="btnAdvance" onclick="submitAdvanceReceipt()">
+                        ⏩ 確認提前繳租 (送出銷帳)
+                    </button>
+                </div>
+                <!-- 3. 修改/新增基本資料 (藍色小按鈕) -->
+                <div class="col-12 mt-2">
+                    <button type="button" class="btn btn-primary w-100 py-2 fw-bold shadow-sm text-white" id="btnUpdate" onclick="submitTenantData()">
+                        🚀 僅儲存/變更基本資料與合約
                     </button>
                 </div>
             </div>
@@ -130,12 +143,10 @@
 
     // 網頁載入完成後的初始化邏輯
     document.addEventListener("DOMContentLoaded", function() {
-        // 自動載入已儲存的 GitHub 連線配置
         if(localStorage.getItem("git_user")) document.getElementById("gitUser").value = localStorage.getItem("git_user");
         if(localStorage.getItem("git_repo")) document.getElementById("gitRepo").value = localStorage.getItem("git_repo");
         if(localStorage.getItem("git_token")) document.getElementById("gitToken").value = localStorage.getItem("git_token");
 
-        // 自動解析網址帶入的房客資訊
         if (getQueryParam('location')) document.getElementById("location").value = getQueryParam('location');
         if (getQueryParam('room')) document.getElementById("room").value = getQueryParam('room');
         if (getQueryParam('name')) document.getElementById("name").value = getQueryParam('name');
@@ -144,45 +155,7 @@
 
         updateDynamicTitle();
         updateElectricityDisplay();
-        checkMode(); // 執行按鈕外觀大變身檢測
     });
-
-    // 🌟 按鈕智慧變身核心邏輯
-    function checkMode() {
-        const submitBtn = document.getElementById("submitBtn");
-        const fullUrlLower = window.location.href.toLowerCase();
-        
-        // 同時支援 ?tab=advance、?action=advance 或網址最後帶有 advance 的各種可能
-        const isAdvance = fullUrlLower.includes('advance');
-        const isConfirm = fullUrlLower.includes('confirm') || fullUrlLower.includes('normal');
-
-        if (isAdvance) {
-            // 【提前繳租模式】：變身為黃色按鈕，綁定提前繳租函式
-            submitBtn.className = "btn btn-warning w-100 py-3 fw-bold fs-5 shadow-sm text-dark";
-            submitBtn.innerHTML = "⏩ 確認提前繳租 (送出銷帳)";
-            submitBtn.setAttribute("onclick", "submitAdvanceReceipt()");
-            
-            // 自動聚焦到電費輸入框，方便房東直接操作
-            setTimeout(() => {
-                const inputElec = document.getElementById("electricity");
-                if(inputElec) {
-                    inputElec.focus();
-                    inputElec.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            }, 300);
-            
-        } else if (isConfirm) {
-            // 【正常收租模式】：變身為綠色按鈕，綁定正常收租函式
-            submitBtn.className = "btn btn-success w-100 py-3 fw-bold fs-5 shadow-sm text-white";
-            submitBtn.innerHTML = "🟢 確認正常當期收租";
-            submitBtn.setAttribute("onclick", "submitNormalReceipt()");
-        } else {
-            // 【預設模式】：維持原本藍色的資料修改按鈕
-            submitBtn.className = "btn btn-primary w-100 py-3 fw-bold fs-5 shadow-sm text-white";
-            submitBtn.innerHTML = "🚀 儲存變更並同步至系統";
-            submitBtn.setAttribute("onclick", "submitTenantData()");
-        }
-    }
 
     // 即時動態標題更新
     function updateDynamicTitle() {
@@ -209,13 +182,11 @@
         document.getElementById("electricityDisplay").innerText = `目前填寫：${elec || 0} 元`;
     }
 
-    // 控制設定面板開關
     function toggleConfig() {
         const panel = document.getElementById("configSection");
         panel.style.display = (panel.style.display === "none" || panel.style.display === "") ? "block" : "none";
     }
 
-    // 儲存金鑰至 LocalStorage
     function saveConfig() {
         localStorage.setItem("git_user", document.getElementById("gitUser").value.trim());
         localStorage.setItem("git_repo", document.getElementById("gitRepo").value.trim());
@@ -224,12 +195,12 @@
         toggleConfig();
     }
 
-    // 核心：發送 Repository Dispatch 至 GitHub Actions
-    function dispatchToGitHub(payloadData, successMsg) {
+    // 發送 Repository Dispatch 至 GitHub Actions
+    function dispatchToGitHub(payloadData, buttonId, successMsg) {
         const user = localStorage.getItem("git_user");
         const repo = localStorage.getItem("git_repo");
         const token = localStorage.getItem("git_token");
-        const buttonEl = document.getElementById("submitBtn");
+        const buttonEl = document.getElementById(buttonId);
 
         if(!user || !repo || !token) {
             Swal.fire({ icon: 'error', title: '缺少連線配置', text: '請點擊右上角⚙️設定，填入您的 GitHub 連線資訊！' });
@@ -264,7 +235,7 @@
         })
         .finally(() => {
             buttonEl.disabled = false;
-            checkMode(); // 恢復按鈕狀態與文字
+            buttonEl.innerHTML = originalText;
         });
     }
 
@@ -288,7 +259,7 @@
             contract_start: document.getElementById("contract_start").value,
             contract_end: document.getElementById("contract_end").value
         };
-        dispatchToGitHub(data, `【${loc} - ${rm}】基本資料修改變更`);
+        dispatchToGitHub(data, "btnUpdate", `【${loc} - ${rm}】基本資料修改變更`);
     }
 
     // 2️⃣ 模式：正常收租銷帳
@@ -306,7 +277,7 @@
             room: rm,
             electricity: parseInt(elec) || 0
         };
-        dispatchToGitHub(data, `【${loc} - ${rm}】當期正常收租確認銷帳`);
+        dispatchToGitHub(data, "btnNormal", `【${loc} - ${rm}】當期正常收租確認銷帳`);
     }
 
     // 3️⃣ 模式：提前繳租銷帳
@@ -324,7 +295,7 @@
             room: rm,
             electricity: parseInt(elec) || 0
         };
-        dispatchToGitHub(data, `【${loc} - ${rm}】房客提前繳租銷帳`);
+        dispatchToGitHub(data, "btnAdvance", `【${loc} - ${rm}】房客提前繳租銷帳`);
     }
 </script>
 </body>
