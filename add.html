@@ -151,12 +151,18 @@
         updateDynamicTitle();
         updateElectricityDisplay();
 
-        // ─── 智慧分流調整（安全判定防禦版） ───
+        // ─── 智慧分流調整（超級防禦、參數不分大小寫版） ───
         const submitBtn = document.getElementById("submitBtn");
         const btnAdvance = document.getElementById("btnAdvance");
         
-        const isConfirm = (action === 'confirm' || tab === 'confirm');
-        const isAdvance = (action === 'advance' || tab === 'advance');
+        const actLower = (action || "").toLowerCase();
+        const tabLower = (tab || "").toLowerCase();
+        const fullUrl = window.location.href.toLowerCase();
+        
+        // 寬鬆比對機制：只要網址參數有 confirm 或網址字串內有包含 confirm 即算數
+        const isConfirm = (actLower === 'confirm' || tabLower === 'confirm' || fullUrl.includes('confirm'));
+        // 寬鬆比對機制：只要網址參數有 advance 或網址字串內有包含 advance 即算數
+        const isAdvance = (actLower === 'advance' || tabLower === 'advance' || fullUrl.includes('advance'));
         
         if (submitBtn && btnAdvance) {
             if (isConfirm) {
