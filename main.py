@@ -269,30 +269,32 @@ def send_main_menu():
             recv_r = sum(t.get('rent', 0) for t in stats["paid_raw_tenants"])
             progress = round((recv_r / exp_r) * 100 if exp_r > 0 else 0, 1)
             
-            # 🟢 已收租名單加強版顯示：房號 (姓名 / 租金 / 繳租日 / 已繳電費)
+            # 🟢 已收租名單加強版顯示：房號 (姓名 / 租金 / 押金 / 繳租日 / ⚡ 已繳電費)
             paid_lines = []
             for t in sorted_paid_objs:
                 hist = t.get('electricity_history', {})
                 c_elec = hist.get(current_year_month, 0)
                 elec_str = f" / ⚡電費:{c_elec}元" if c_elec > 0 else ""
-                paid_lines.append(f"🟢 {t.get('room','')} ({t.get('name','')} / {t.get('rent',0)}元 / 繳租日:{t.get('pay_day',1)}號{elec_str})")
-            paid_summary = "\n   ".join(paid_lines) if paid_lines else "   <i>暫無</i>"
+                deposit_val = t.get('deposit', 0)
+                paid_lines.append(f"🟢 {t.get('room','')} ({t.get('name','')} / {t.get('rent',0)}元 / 押金:{deposit_val}元 / 繳租日:{t.get('pay_day',1)}號{elec_str})")
+            paid_summary = "\n    ".join(paid_lines) if paid_lines else "    <i>暫無</i>"
             
-            # 🔴 未收租名單加強版顯示：房號 (姓名 / 租金 / 繳租日 / 當期應繳電費)
+            # 🔴 未收租名單加強版顯示：房號 (姓名 / 租金 / 押金 / 繳租日 / ⚡ 當期應繳電費)
             unpaid_lines = []
             for t in sorted_unpaid_objs:
                 curr_elec = t.get('electricity', 0)
-                elec_str = f" / ⚡未繳電費:{curr_elec}元" if curr_elec > 0 else ""
-                unpaid_lines.append(f"🔴 {t.get('room','')} ({t.get('name','')} / {t.get('rent',0)}元 / 繳租日:{t.get('pay_day',1)}號{elec_str})")
-            unpaid_summary = "\n   ".join(unpaid_lines) if unpaid_lines else "   <i>✨ 全數繳齊！</i>"
+                elec_str = f" / ⚡電費:{curr_elec}元" if curr_elec > 0 else ""
+                deposit_val = t.get('deposit', 0)
+                unpaid_lines.append(f"🔴 {t.get('room','')} ({t.get('name','')} / {t.get('rent',0)}元 / 押金:{deposit_val}元 / 繳租日:{t.get('pay_day',1)}號{elec_str})")
+            unpaid_summary = "\n    ".join(unpaid_lines) if unpaid_lines else "    <i>✨ 全數繳齊！</i>"
             
             finance_text += (
                 f"=====================\n"
                 f"📍 <b>【{loc}地區】財務統計</b>\n"
                 f"💰 實收租金：<b>{recv_r}</b> / {exp_r} 元\n"
                 f"📈 租金進度：<code>{progress}%</code>\n\n"
-                f"✅ <b>已收租房間：</b>\n   {paid_summary}\n"
-                f"⚠️ <b>未收租房間：</b>\n   {unpaid_summary}\n"
+                f"✅ <b>已收租房間：</b>\n    {paid_summary}\n"
+                f"⚠️ <b>未收租房間：</b>\n    {unpaid_summary}\n"
             )
 
     # ─── 主選單下方的功能按鈕群（直連對應至最新的 add.html） ───
