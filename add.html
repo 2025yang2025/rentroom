@@ -29,13 +29,13 @@
 
 <div class="container py-2" style="max-width: 600px;">
 
-    <!-- 🔍 網址參數即時偵測面板 (找出為什麼沒變化的凶手) -->
+    <!-- 🔍 網址參數即時偵測面板 (輔助肉眼檢查) -->
     <div class="card p-3 mb-3 debug-panel">
         <div class="fw-bold text-danger mb-1">🔍 網址參數即時偵測面板：</div>
-        <div id="debugAction">• action 欄位抓到：偵測中...</div>
-        <div id="debugTab">• tab 欄位抓到：偵測中...</div>
+        <div id="debugAction">• 網址問號參數抓到：偵測中...</div>
+        <div id="debugHash">• 網址井字錨點(#)抓到：偵測中...</div>
         <div id="debugUrl" style="word-break: break-all;">• 完整網址：偵測中...</div>
-        <div id="debugResult" class="mt-2 fw-bold text-primary">• 判定結果：偵測中...</div>
+        <div id="debugResult" class="mt-2 fw-bold text-primary">• 最終判定結果：偵測中...</div>
     </div>
 
     <!-- 🔒 GitHub API 連線配置 (預設隱藏) -->
@@ -85,7 +85,7 @@
 
             <div class="mb-3">
                 <label class="form-label">💰 每月租金（不改不填）</label>
-                <input type="number" class="form-control" id="rent" placeholder="example: 8000" oninput="updateDynamicTitle()">
+                <input type="number" class="form-control" id="rent" placeholder="例如：8000" oninput="updateDynamicTitle()">
             </div>
 
             <!-- 每月繳租日 -->
@@ -143,6 +143,7 @@
         if(localStorage.getItem("git_repo")) document.getElementById("gitRepo").value = localStorage.getItem("git_repo");
         if(localStorage.getItem("git_token")) document.getElementById("gitToken").value = localStorage.getItem("git_token");
 
+        // 解析常規問號參數
         const urlParams = new URLSearchParams(window.location.search);
         const tab = urlParams.get('tab');
         const action = urlParams.get('action');
@@ -152,6 +153,9 @@
         const pRent = urlParams.get('rent');
         const pPayDay = urlParams.get('pay_day');
         
+        // 解析井字號 (#) 錨點參數 (防禦 GitHub Pages 參數被洗掉)
+        const urlHash = window.location.hash.replace('#', '').trim();
+
         if (pLocation) document.getElementById("location").value = pLocation;
         if (pRoom) document.getElementById("room").value = pRoom;
         if (pName) document.getElementById("name").value = pName;
@@ -162,30 +166,33 @@
         updateElectricityDisplay();
 
         // ─── 偵錯面板數據填入 ───
-        document.getElementById("debugAction").innerText = `• action 欄位抓到：【${action || '無資料'}】`;
-        document.getElementById("debugTab").innerText = `• tab 欄位抓到：【${tab || '無資料'}】`;
+        document.getElementById("debugAction").innerText = `• 網址問號參數：action=${action || '無'}, tab=${tab || '無'}`;
+        document.getElementById("debugHash").innerText = `• 網址井字錨點(#)：【${urlHash || '無'}】`;
         document.getElementById("debugUrl").innerText = `• 完整網址：${window.location.href}`;
 
-        // ─── 智慧分流調整 ───
+        // ─── 智慧雙軌分流判定 ───
         const submitBtn = document.getElementById("submitBtn");
         const btnAdvance = document.getElementById("btnAdvance");
         
         const actLower = (action || "").toLowerCase();
         const tabLower = (tab || "").toLowerCase();
+        const hashLower = urlHash.toLowerCase();
         const fullUrl = window.location.href.toLowerCase();
         
-        const isConfirm = (actLower === 'confirm' || tabLower === 'confirm' || fullUrl.includes('confirm'));
-        const isAdvance = (actLower === 'advance' || tabLower === 'advance' || fullUrl.includes('advance'));
+        // 判定是否為正常收租
+        const isConfirm = (actLower === 'confirm' || tabLower === 'confirm' || hashLower === 'confirm' || fullUrl.includes('confirm'));
+        // 判定是否為提前繳租
+        const isAdvance = (actLower === 'advance' || tabLower === 'advance' || hashLower === 'advance' || fullUrl.includes('advance'));
         
         if (submitBtn && btnAdvance) {
             if (isConfirm) {
-                document.getElementById("debugResult").innerText = `• 判定結果：切換至【正常收租】模式`;
+                document.getElementById("debugResult").innerText = `• 最終判定結果：切換至【🟢 正常收租】模式`;
                 submitBtn.className = "btn btn-success w-100 py-3 fw-bold fs-5 shadow-sm";
                 submitBtn.innerHTML = "🟢 確認正常收租";
                 submitBtn.setAttribute("onclick", "submitNormalReceipt()");
                 btnAdvance.className = "btn btn-secondary w-100 py-3 fw-bold opacity-50"; 
             } else if (isAdvance) {
-                document.getElementById("debugResult").innerText = `• 判定結果：切換至【提前繳租】模式`;
+                document.getElementById("debugResult").innerText = `• 最終判定結果：切換至【⏩ 提前繳租】模式`;
                 submitBtn.className = "btn btn-secondary w-100 py-3 fw-bold opacity-50";
                 submitBtn.innerHTML = "💡 目前為提前繳租";
                 submitBtn.setAttribute("onclick", "Swal.fire('提示', '目前為提前繳租模式，請點擊右邊黃色按鈕送出！', 'info')");
@@ -197,7 +204,7 @@
                     inputElectricity.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
             } else {
-                document.getElementById("debugResult").innerText = `• 判定結果：無參數，走預設【儲存變更】模式`;
+                document.getElementById("debugResult").innerText = `• 最終判定結果：無匹配參數，預設【🚀 儲存變更】模式`;
                 submitBtn.className = "btn btn-primary w-100 py-3 fw-bold fs-5 shadow-sm";
                 submitBtn.innerHTML = "🚀 儲存變更並同步";
                 submitBtn.setAttribute("onclick", "submitTenantData()");
