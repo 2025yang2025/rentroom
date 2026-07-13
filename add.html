@@ -147,14 +147,27 @@
         if(localStorage.getItem("git_repo")) document.getElementById("gitRepo").value = localStorage.getItem("git_repo");
         if(localStorage.getItem("git_token")) document.getElementById("gitToken").value = localStorage.getItem("git_token");
 
+        // 自動解析網址帶入的房客資訊
         if (getQueryParam('location')) document.getElementById("location").value = getQueryParam('location');
         if (getQueryParam('room')) document.getElementById("room").value = getQueryParam('room');
         if (getQueryParam('name')) document.getElementById("name").value = getQueryParam('name');
         if (getQueryParam('rent')) document.getElementById("rent").value = getQueryParam('rent');
         if (getQueryParam('pay_day')) document.getElementById("pay_day").value = getQueryParam('pay_day');
 
+        // 🔥 超強防錯相容邏輯：同時檢查 electricity、elec、utility 變數名
+        const pElectricity = getQueryParam('electricity') || getQueryParam('elec') || getQueryParam('utility');
+        if (pElectricity) {
+            document.getElementById("electricity").value = pElectricity;
+        }
+
+        // 🔥 押金防錯相容邏輯
+        const pDeposit = getQueryParam('deposit');
+        if (pDeposit) {
+            document.getElementById("deposit").value = pDeposit;
+        }
+
         updateDynamicTitle();
-        updateElectricityDisplay();
+        updateElectricityDisplay(); // 確保立即將帶入的電費顯示在標籤上
     });
 
     // 即時動態標題更新
