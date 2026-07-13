@@ -48,7 +48,7 @@
         <h4 class="text-center fw-bold mb-2">➕ 房客資料與財務管理</h4>
         <p class="text-center text-muted small mb-4">💡 填寫「地點、房號」為核心必填，再依據您的目的點擊最下方對應的彩色功能按鈕送出即可。</p>
         
-        <!-- 頂部即時動態標題 -->
+        <!-- 頂部即時動態標題 (包含地點、房號、姓名、租金、押金、繳租日) -->
         <div id="dynamicTitle" class="alert alert-info text-center fw-bold d-none" style="font-size: 1.1rem;"></div>
 
         <form id="tenantForm" onsubmit="return false;">
@@ -87,7 +87,8 @@
 
             <div class="mb-3">
                 <label class="form-label">🔒 押金總額（追加/修改在此填新總額）</label>
-                <input type="number" class="form-control" id="deposit" placeholder="例如：16000">
+                <!-- 加上 oninput 觸發即時同步顯示在上方提示框 -->
+                <input type="number" class="form-control" id="deposit" placeholder="例如：16000" oninput="updateDynamicTitle()">
             </div>
 
             <div class="mb-3">
@@ -106,7 +107,7 @@
                 </div>
             </div>
 
-            <!-- 🛠️ 底部功能按鈕區塊（全部平鋪，一目了然） -->
+            <!-- 🛠️ 底部功能按鈕區塊 -->
             <div class="row g-2 mt-3">
                 <!-- 1. 正常當期收租 (綠色大按鈕) -->
                 <div class="col-12">
@@ -133,7 +134,6 @@
 </div>
 
 <script>
-    // 取得網址參數公用函式
     function getQueryParam(paramName) {
         const url = window.location.href;
         const regex = new RegExp('[?&]' + paramName + '=([^&#]*)', 'i');
@@ -141,47 +141,54 @@
         return results ? decodeURIComponent(results[1]) : null;
     }
 
-    // 網頁載入完成後的初始化邏輯
     document.addEventListener("DOMContentLoaded", function() {
         if(localStorage.getItem("git_user")) document.getElementById("gitUser").value = localStorage.getItem("git_user");
         if(localStorage.getItem("git_repo")) document.getElementById("gitRepo").value = localStorage.getItem("git_repo");
         if(localStorage.getItem("git_token")) document.getElementById("gitToken").value = localStorage.getItem("git_token");
 
-        // 自動解析網址帶入的房客資訊
         if (getQueryParam('location')) document.getElementById("location").value = getQueryParam('location');
         if (getQueryParam('room')) document.getElementById("room").value = getQueryParam('room');
         if (getQueryParam('name')) document.getElementById("name").value = getQueryParam('name');
         if (getQueryParam('rent')) document.getElementById("rent").value = getQueryParam('rent');
         if (getQueryParam('pay_day')) document.getElementById("pay_day").value = getQueryParam('pay_day');
 
-        // 🔥 超強防錯相容邏輯：同時檢查 electricity、elec、utility 變數名
+        // 多變數相容檢查 (電費)
         const pElectricity = getQueryParam('electricity') || getQueryParam('elec') || getQueryParam('utility');
         if (pElectricity) {
             document.getElementById("electricity").value = pElectricity;
         }
 
-        // 🔥 押金防錯相容邏輯
+        // 押金解析帶入
         const pDeposit = getQueryParam('deposit');
         if (pDeposit) {
             document.getElementById("deposit").value = pDeposit;
         }
 
         updateDynamicTitle();
-        updateElectricityDisplay(); // 確保立即將帶入的電費顯示在標籤上
+        updateElectricityDisplay();
     });
 
-    // 即時動態標題更新
+    // 🌟 即時動態標題更新 (同步將押金與繳租日渲染到頂部)
     function updateDynamicTitle() {
         const room = document.getElementById("room").value.trim();
         const name = document.getElementById("name").value.trim();
         const rent = document.getElementById("rent").value.trim();
+        const deposit = document.getElementById("deposit").value.trim();
+        const payDay = document.getElementById("pay_day").value.trim();
         const titleDiv = document.getElementById("dynamicTitle");
 
-        if (room || name || rent) {
+        if (room || name || rent || deposit || payDay) {
             titleDiv.classList.remove("d-none");
             let infoText = `當前選定：${room || '❓房號'}`;
-            if (name || rent) {
-                infoText += ` (${name || '未填姓名'}${rent ? ' / ' + rent + '元' : ''})`;
+            
+            let details = [];
+            if (name) details.push(`姓名: ${name}`);
+            if (rent) details.push(`租金: ${rent}元`);
+            if (deposit) details.push(`押金: ${deposit}元`);
+            if (payDay) details.push(`繳租日: ${payDay}號`);
+            
+            if (details.length > 0) {
+                infoText += ` (${details.join(' / ')})`;
             }
             titleDiv.innerText = infoText;
         } else {
@@ -189,7 +196,6 @@
         }
     }
 
-    // 即時更新電費 Badge 顯示
     function updateElectricityDisplay() {
         const elec = document.getElementById("electricity").value;
         document.getElementById("electricityDisplay").innerText = `目前填寫：${elec || 0} 元`;
@@ -208,7 +214,6 @@
         toggleConfig();
     }
 
-    // 發送 Repository Dispatch 至 GitHub Actions
     function dispatchToGitHub(payloadData, buttonId, successMsg) {
         const user = localStorage.getItem("git_user");
         const repo = localStorage.getItem("git_repo");
@@ -252,7 +257,6 @@
         });
     }
 
-    // 1️⃣ 模式：純修改/新增基本資料
     function submitTenantData() {
         const loc = document.getElementById("location").value.trim();
         const rm = document.getElementById("room").value.trim();
@@ -275,7 +279,6 @@
         dispatchToGitHub(data, "btnUpdate", `【${loc} - ${rm}】基本資料修改變更`);
     }
 
-    // 2️⃣ 模式：正常收租銷帳
     function submitNormalReceipt() {
         const loc = document.getElementById("location").value.trim();
         const rm = document.getElementById("room").value.trim();
@@ -293,7 +296,6 @@
         dispatchToGitHub(data, "btnNormal", `【${loc} - ${rm}】當期正常收租確認銷帳`);
     }
 
-    // 3️⃣ 模式：提前繳租銷帳
     function submitAdvanceReceipt() {
         const loc = document.getElementById("location").value.trim();
         const rm = document.getElementById("room").value.trim();
