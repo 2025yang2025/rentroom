@@ -14,6 +14,9 @@
         .electricity-badge { background-color: #fff3cd; color: #856404; padding: 5px 10px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; border: 1px solid #ffeeba; }
         .config-panel { background-color: #e9ecef; border-radius: 8px; display: none; }
         .form-label { font-weight: bold; margin-bottom: 5px; }
+        .nav-tabs .nav-link { font-weight: bold; color: #495057; border-radius: 8px 8px 0 0; }
+        .nav-tabs .nav-link.active { background-color: #fff; border-bottom-color: transparent; }
+        .bg-advance-mode { background-color: #fff9db; border: 1px solid #ffe066; }
     </style>
 </head>
 <body>
@@ -45,16 +48,26 @@
 
     <!-- ================= 📝 房客資料與財務管理表單 ================= -->
     <div class="card p-4 mb-4">
-        <h4 class="text-center fw-bold mb-2">➕ 房客資料與財務管理</h4>
-        <p class="text-center text-muted small mb-4">💡 輸入「地點與房號」後，系統會自動從 tenants.json 撈取最新資料並自動填入下方欄位。</p>
-        
+        <!-- 頂部切換模式頁籤 -->
+        <ul class="nav nav-tabs mb-3" id="modeTabs" role="tablist">
+            <li class="nav-item flex-fill text-center" role="presentation">
+                <button class="nav-link w-100 active text-success" id="normal-tab" data-bs-toggle="tab" type="button" onclick="switchMode('normal')">🟢 正常收租 / 資料維護</button>
+            </li>
+            <li class="nav-item flex-fill text-center" role="presentation">
+                <button class="nav-link w-100 text-warning" id="advance-tab" data-bs-toggle="tab" type="button" onclick="switchMode('advance')">⏩ 房客提前繳租</button>
+            </li>
+        </ul>
+
+        <h4 id="formMainTitle" class="text-center fw-bold mb-2">➕ 房客資料與財務管理</h4>
+        <p id="formSubTitle" class="text-center text-muted small mb-4">💡 輸入「地點與房號」後，系統會自動從 tenants.json 撈取最新資料並自動填入下方欄位。</p>
+         
         <!-- 頂部即時動態標題 -->
         <div id="dynamicTitle" class="alert alert-info text-center fw-bold d-none" style="font-size: 1.1rem;"></div>
 
         <form id="tenantForm" onsubmit="return false;">
             
             <!-- 核心必填群組 -->
-            <div class="highlight-group mb-3">
+            <div class="highlight-group mb-3" id="coreGroup">
                 <div class="mb-3">
                     <label class="form-label">📍 地點（如：齊德500地區）</label>
                     <input type="text" class="form-control" id="location" placeholder="例如：齊德500地區" required oninput="matchAndUpdateTenantData()">
@@ -71,56 +84,73 @@
                 </div>
             </div>
 
+            <!-- 💰 提前繳租專用：手動輸入實收租金費用 (正常模式下隱藏) -->
+            <div class="mb-3 p-3 rounded d-none bg-advance-mode" id="advanceRentArea">
+                <label class="form-label text-danger">💰 本次【提前繳租】實收租金金額</label>
+                <input type="number" class="form-control border-danger" id="advanceRentInput" placeholder="請輸入房客本次繳納的租金金額">
+                <div class="form-text text-muted">※ 此欄位供流動變更租金或確認扣繳金額使用，送出後將計入下月帳目。</div>
+            </div>
+
             <!-- 顯示與填寫當期電費 -->
             <div class="mb-3">
                 <div class="d-flex justify-content-between align-items-center mb-1">
-                    <label class="form-label mb-0" style="color: #fd7e14;">⚡ 當期應繳電費（新抄表金額）</label>
+                    <label class="form-label mb-0" style="color: #fd7e14;" id="elecLabel">⚡ 當期應繳電費（新抄表金額）</label>
                     <span id="electricityDisplay" class="electricity-badge">目前填寫：0 元</span>
                 </div>
                 <input type="number" class="form-control" id="electricity" placeholder="自動撈取中..." value="0" oninput="updateElectricityDisplay()">
             </div>
 
-            <div class="mb-3">
-                <label class="form-label">💰 每月租金</label>
-                <input type="number" class="form-control" id="rent" placeholder="自動撈取中..." oninput="updateDynamicTitle()">
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">🔒 押金總額</label>
-                <input type="number" class="form-control" id="deposit" placeholder="自動撈取中..." oninput="updateDynamicTitle()">
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">📅 每月繳租日（號）</label>
-                <input type="number" class="form-control" id="pay_day" min="1" max="31" placeholder="自動撈取中..." oninput="updateDynamicTitle()">
-            </div>
-
-            <div class="row">
-                <div class="col-6 mb-3">
-                    <label class="form-label">📝 合約開始日</label>
-                    <input type="date" class="form-control" id="contract_start">
+            <!-- 基本合約與租金顯示區塊 (在提前繳租模式時可唯讀或隱藏，此處保留供參閱) -->
+            <div id="baseInfoFields">
+                <div class="mb-3">
+                    <label class="form-label">💰 每月固定租金</label>
+                    <input type="number" class="form-control" id="rent" placeholder="自動撈取中..." oninput="updateDynamicTitle()">
                 </div>
-                <div class="col-6 mb-3">
-                    <label class="form-label">⏳ 合約結束日</label>
-                    <input type="date" class="form-control" id="contract_end">
+
+                <div class="mb-3">
+                    <label class="form-label">🔒 押金總額</label>
+                    <input type="number" class="form-control" id="deposit" placeholder="自動撈取中..." oninput="updateDynamicTitle()">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">📅 每月繳租日（號）</label>
+                    <input type="number" class="form-control" id="pay_day" min="1" max="31" placeholder="自動撈取中..." oninput="updateDynamicTitle()">
+                </div>
+
+                <div class="row">
+                    <div class="col-6 mb-3">
+                        <label class="form-label">📝 合約開始日</label>
+                        <input type="date" class="form-control" id="contract_start">
+                    </div>
+                    <div class="col-6 mb-3">
+                        <label class="form-label">⏳ 合約結束日</label>
+                        <input type="date" class="form-control" id="contract_end">
+                    </div>
                 </div>
             </div>
 
             <!-- 🛠️ 底部功能按鈕區塊 -->
             <div class="row g-2 mt-3">
-                <div class="col-12">
-                    <button type="button" class="btn btn-success w-100 py-3 fw-bold fs-5 shadow-sm text-white" id="btnNormal" onclick="submitNormalReceipt()">
-                        🟢 確認正常當期收租 (送出銷帳)
-                    </button>
+                <!-- 正常模式按鈕群 -->
+                <div id="normalActionButtons" class="col-12">
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <button type="button" class="btn btn-success w-100 py-3 fw-bold fs-5 shadow-sm text-white" id="btnNormal" onclick="submitNormalReceipt()">
+                                🟢 確認正常當期收租 (送出銷帳)
+                            </button>
+                        </div>
+                        <div class="col-12">
+                            <button type="button" class="btn btn-primary w-100 py-2 fw-bold shadow-sm text-white" id="btnUpdate" onclick="submitTenantData()">
+                                🚀 僅儲存/變更基本資料與合約
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                <div class="col-12">
+
+                <!-- 提前繳租模式按鈕群 -->
+                <div id="advanceActionButtons" class="col-12 d-none">
                     <button type="button" class="btn btn-warning w-100 py-3 fw-bold fs-5 shadow-sm text-dark" id="btnAdvance" onclick="submitAdvanceReceipt()">
                         ⏩ 確認提前繳租 (送出銷帳)
-                    </button>
-                </div>
-                <div class="col-12 mt-2">
-                    <button type="button" class="btn btn-primary w-100 py-2 fw-bold shadow-sm text-white" id="btnUpdate" onclick="submitTenantData()">
-                        🚀 僅儲存/變更基本資料與合約
                     </button>
                 </div>
             </div>
@@ -129,8 +159,12 @@
     </div>
 </div>
 
+<!-- 引入 Bootstrap 5 Bundle JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
 <script>
     let globalTenantsData = []; // 用於存放從 GitHub 下載的完整房客清單
+    let currentMode = 'normal';
 
     function getQueryParam(paramName) {
         const url = window.location.href;
@@ -147,10 +181,60 @@
         // 如果網址本身有帶參數則先帶入
         if (getQueryParam('location')) document.getElementById("location").value = getQueryParam('location');
         if (getQueryParam('room')) document.getElementById("room").value = getQueryParam('room');
+        
+        // 判斷 Telegram 傳送過來的分流標籤
+        const tabParam = getQueryParam('tab');
+        if (tabParam === 'advance' || getQueryParam('action') === 'advance') {
+            // 切換到提前繳租頁籤
+            const advanceTabEl = document.getElementById('advance-tab');
+            if (advanceTabEl) {
+                let tab = new bootstrap.Tab(advanceTabEl);
+                tab.show();
+                switchMode('advance');
+            }
+        }
 
         // 🔥 初始化：直接從 GitHub Fetch 最新 tenants.json
         fetchLatestTenantsJSON();
     });
+
+    // 🔄 切換表單模式 (正常維護 vs 提前繳租)
+    function switchMode(mode) {
+        currentMode = mode;
+        const mainTitle = document.getElementById("formMainTitle");
+        const subTitle = document.getElementById("formSubTitle");
+        const advanceRentArea = document.getElementById("advanceRentArea");
+        const normalBtns = document.getElementById("normalActionButtons");
+        const advanceBtns = document.getElementById("advanceActionButtons");
+        const coreGroup = document.getElementById("coreGroup");
+        const elecLabel = document.getElementById("elecLabel");
+
+        if (mode === 'advance') {
+            mainTitle.innerText = "⏩ 房客提前繳租銷帳";
+            subTitle.innerText = "💡 此模式用於處理房客提前繳交下個月款項。您可以自由修正下方實際收到的租金與電費金額。";
+            advanceRentArea.classList.remove("d-none");
+            advanceBtns.classList.remove("d-none");
+            normalBtns.classList.add("d-none");
+            coreGroup.style.backgroundColor = "#fff9db";
+            coreGroup.style.border = "1px solid #ffe066";
+            elecLabel.innerText = "⚡ 提前繳租 - 實收電費金額";
+            
+            // 將原本自動撈取的月租金帶入提前收租輸入框中
+            const rentVal = document.getElementById("rent").value;
+            if(rentVal) {
+                document.getElementById("advanceRentInput").value = rentVal;
+            }
+        } else {
+            mainTitle.innerText = "➕ 房客資料與財務管理";
+            subTitle.innerText = "💡 輸入「地點與房號」後，系統會自動從 tenants.json 撈取最新資料並自動填入下方欄位。";
+            advanceRentArea.classList.add("d-none");
+            advanceBtns.classList.add("d-none");
+            normalBtns.classList.remove("d-none");
+            coreGroup.style.backgroundColor = "#f0f4f8";
+            coreGroup.style.border = "1px solid #d0e2ff";
+            elecLabel.innerText = "⚡ 當期應繳電費（新抄表金額）";
+        }
+    }
 
     // 🔒 從 GitHub 異步撈取最新的 tenants.json 檔案
     function fetchLatestTenantsJSON() {
@@ -160,7 +244,6 @@
 
         if(!user || !repo || !token) return;
 
-        // 加 headers 避免 Private repo 抓不到，且能抓到最新提交的內容
         fetch(`https://api.github.com/repos/${user}/${repo}/contents/tenants.json`, {
             headers: {
                 "Accept": "application/vnd.github.v3.raw",
@@ -173,10 +256,8 @@
             return res.json();
         })
         .then(data => {
-            // 確保資料是陣列格式
             globalTenantsData = Array.isArray(data) ? data : (data.tenants || []);
             console.log("成功同步後端房客資料，共計: " + globalTenantsData.length + " 筆");
-            // 載入完成後嘗試比對一次（針對 Telegram 進來已自帶地點房號的情況）
             matchAndUpdateTenantData();
         })
         .catch(err => {
@@ -194,18 +275,21 @@
             return;
         }
 
-        // 在陣列中尋找符合地點與房間號碼的房客資料
         const match = globalTenantsData.find(t => 
             String(t.location).includes(inputLocation) && String(t.room) === String(inputRoom)
         );
 
         if (match) {
-            // 自動幫忙填入表單欄位
             document.getElementById("name").value = match.name || "";
             document.getElementById("rent").value = match.rent || "";
             document.getElementById("deposit").value = match.deposit || "";
             document.getElementById("pay_day").value = match.pay_day || "";
             document.getElementById("electricity").value = match.electricity || 0;
+            
+            if(currentMode === 'advance') {
+                document.getElementById("advanceRentInput").value = match.rent || "";
+            }
+
             if(match.contract_start) document.getElementById("contract_start").value = match.contract_start;
             if(match.contract_end) document.getElementById("contract_end").value = match.contract_end;
         }
@@ -257,7 +341,7 @@
         localStorage.setItem("git_token", document.getElementById("gitToken").value.trim());
         Swal.fire('設定成功', '連線金鑰已加密儲存於本地瀏覽器中。', 'success');
         toggleConfig();
-        fetchLatestTenantsJSON(); // 儲存後立即重新拉取
+        fetchLatestTenantsJSON();
     }
 
     function dispatchToGitHub(payloadData, buttonId, successMsg) {
@@ -292,6 +376,7 @@
             if(!response.ok) throw new Error(`HTTP 錯誤! 代碼: ${response.status}`);
             Swal.fire({ icon: 'success', title: '同步指令已送出！', text: successMsg + ' 請於 1 分鐘後查看 Telegram 財務表狀態。' });
             document.getElementById("electricity").value = "0";
+            document.getElementById("advanceRentInput").value = "";
             updateElectricityDisplay();
         })
         .catch(err => {
@@ -345,15 +430,23 @@
     function submitAdvanceReceipt() {
         const loc = document.getElementById("location").value.trim();
         const rm = document.getElementById("room").value.trim();
+        const advRent = document.getElementById("advanceRentInput").value;
         const elec = document.getElementById("electricity").value;
+        
         if (!loc || !rm) {
             Swal.fire({ icon: 'warning', title: '欄位未完整', text: '無法識別房間，請確認地點與房號！' });
             return;
         }
+        if (!advRent) {
+            Swal.fire({ icon: 'warning', title: '欄位未完整', text: '請輸入本次提前繳租的實收租金金額！' });
+            return;
+        }
+
         const data = {
             action_type: "advance_receipt",
             location: loc,
             room: rm,
+            rent: parseInt(advRent), // 將手動填入的租金帶給後端
             electricity: parseInt(elec) || 0
         };
         dispatchToGitHub(data, "btnAdvance", `【${loc} - ${rm}】房客提前繳租銷帳`);
