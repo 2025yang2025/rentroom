@@ -67,7 +67,7 @@
         "pay_day": 15,
         "contract_start": "2026-04-15",
         "contract_end": "2027-04-14",
-        "last_paid_date": "2026-06-30",
+        "last_paid_date": "2026-06-15",
         "deposit": 14000
     },
     {
@@ -104,7 +104,7 @@
         "pay_day": 15,
         "contract_start": "2026-05-15",
         "contract_end": "2027-05-14",
-        "last_paid_date": "2026-06-30",
+        "last_paid_date": "2026-06-15",
         "deposit": 17000
     },
     {
@@ -115,7 +115,7 @@
         "pay_day": 25,
         "contract_start": "2026-06-25",
         "contract_end": "2027-06-24",
-        "last_paid_date": "2026-06-30",
+        "last_paid_date": "2026-07-11",
         "deposit": 21000,
         "electricity": 0
     },
@@ -127,7 +127,7 @@
         "pay_day": 15,
         "contract_start": "2026-06-15",
         "contract_end": "2027-07-14",
-        "last_paid_date": "2026-06-30",
+        "last_paid_date": "2026-07-10",
         "deposit": 18000
     },
     {
