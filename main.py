@@ -7,6 +7,7 @@ json_path = 'tenants.json'
 try:
     with open(json_path, 'r', encoding='utf-8') as f:
         tenants = json.load(f)
+    print(f"💾 成功讀取資料庫，目前共有 {len(tenants)} 筆房客資料。")
 except FileNotFoundError:
     tenants = []
     print("⚠️ 找不到 tenants.json 檔案，將建立新的房客清單。")
@@ -20,13 +21,21 @@ chat_id = os.getenv('TG_CHAT_ID')
 today = datetime.today()
 current_year_month = today.strftime('%Y-%m')
 
+def send_tg_error(msg):
+    """專用緊急通知工具，確保錯誤一定能傳到手機上"""
+    if bot_token and chat_id:
+        try:
+            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": msg})
+        except Exception as e:
+            print(f"發送 TG 錯誤失敗: {e}")
+
 # 房號排序專用小工具
 def get_room_number_key(tenant_obj):
     r_name = str(tenant_obj.get('room', '')).replace('房', '').strip()
     try:
-        return (0, int(r_name)) # 純數字房號優先排序 (如 101, 102)
+        return (0, int(r_name))
     except ValueError:
-        return (1, r_name)     # 含有文字的排後面 (如 A房, 店面)
+        return (1, r_name)
 
 # ==========================================
 # 📥 核心功能：處理來自網頁直連的 Dispatch 訊號
@@ -38,18 +47,25 @@ def handle_web_dispatch():
     if event_name != "repository_dispatch":
         return False 
 
-    print("📥 偵測到來自網頁的直連訊號 (repository_dispatch)")
+    print(f"📥 偵測到來自網頁的直連訊號 (repository_dispatch)，Payload 長度: {len(client_payload_str)}")
     
     try:
         payload = json.loads(client_payload_str)
     except Exception as e:
-        print(f"❌ 解析網頁 Payload 失敗: {e}")
+        err = f"❌ 解析網頁 Payload 失敗: {e}\nPayload 內容: {client_payload_str}"
+        print(err)
+        send_tg_error(err)
         return True
 
     action_type = payload.get("action_type")
     global tenants
 
-    # 強效字串清理：移除所有空格、特定中文字符、括號，並轉小寫
+    if not action_type:
+        err = f"⚠️ 警告：收到的網頁資料中沒有 action_type 欄位！\nPayload: {payload}"
+        print(err)
+        send_tg_error(err)
+        return True
+
     def clean_str(s):
         if not s:
             return ""
@@ -57,7 +73,7 @@ def handle_web_dispatch():
             s = str(s).replace(remove_char, "")
         return s.strip().lower()
 
-    # ─── 分流 A：確認收到租金（支援正常收租與提前繳租） ───
+    # ─── 分流 A：確認收到租金 ───
     if action_type in ["confirm_receipt", "advance_receipt"]:
         room = str(payload.get("room", "")).strip()
         location = str(payload.get("location", "")).strip()
@@ -75,7 +91,7 @@ def handle_web_dispatch():
             mode_text = "正常收租"
             
         web_elec = payload.get("electricity")
-        print(f"▶ 執行【{mode_text}確認】: {location} - {room} (歸檔月份: {this_month_key})")
+        print(f"▶ 執行【{mode_text}確認】: 地點={location}, 房號={room} (歸檔月份: {this_month_key})")
         
         updated = False
         target_room_clean = clean_str(room)
@@ -85,9 +101,7 @@ def handle_web_dispatch():
             current_room_clean = clean_str(t.get("room", ""))
             current_loc_clean = clean_str(t.get("location", ""))
             
-            print(f"🔍 比對中 -> 網頁端:[{target_loc_clean}][{target_room_clean}] 🔄 資料庫:[{current_loc_clean}][{current_room_clean}]")
-
-            # 💡 模糊相容比對：只要地點互相包含（例如 中華西 包含於 中華西606地區），且房號完全一致就放行
+            # 模糊相容比對：地點互相包含且房號完全一致
             location_matched = (target_loc_clean in current_loc_clean) or (current_loc_clean in target_loc_clean)
             room_matched = (target_room_clean == current_room_clean)
 
@@ -99,18 +113,24 @@ def handle_web_dispatch():
                     t["electricity_history"] = {}
                 
                 t["electricity_history"][this_month_key] = elec_amount
-                t["electricity"] = 0 # 歸零當期應繳
+                t["electricity"] = 0 
                 updated = True
                 print(f"✅ 更新成功！[{this_month_key}] 紀錄電費 {elec_amount} 元已歸檔並歸零。")
                 break
         
         if not updated:
-            err_msg = f"⚠️ 網頁銷帳失敗：找不到對應房間！\n輸入的地點：{location}\n輸入的房號：{room}\n請檢查 json 中的 location 與 room 欄位文字是否完全一致。"
+            # 找不到房間時，主動把比對失敗詳情直接發到你的 Telegram
+            all_rooms_debug = ", ".join([f"[{t.get('location')}-{t.get('room')}]" for t in tenants])
+            err_msg = (
+                f"⚠️ 網頁銷帳失敗：找不到對應房間！\n"
+                f"網頁輸入地點：{location}\n"
+                f"網頁輸入房號：{room}\n"
+                f"目前資料庫現有房間：\n{all_rooms_debug}"
+            )
             print(err_msg)
-            if bot_token and chat_id:
-                requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": err_msg})
+            send_tg_error(err_msg)
 
-    # ─── 分流 B：萬用新增 / 欄位追加修改 ───
+    # ─── 分流 B：萬用新增 / 欄位修改 ───
     elif action_type == "add_tenant":
         room = payload.get("room")
         location = payload.get("location")
@@ -125,7 +145,6 @@ def handle_web_dispatch():
                 break
         
         if existing_tenant:
-            print(f"🔍 偵測到現存房間，啟動欄位修改...")
             if payload.get("rent") is not None: existing_tenant["rent"] = int(payload.get("rent"))
             if payload.get("deposit") is not None: existing_tenant["deposit"] = int(payload.get("deposit"))
             if payload.get("electricity") is not None: existing_tenant["electricity"] = int(payload.get("electricity"))
@@ -135,17 +154,11 @@ def handle_web_dispatch():
             if name: existing_tenant["name"] = name
         else:
             new_tenant = {
-                "location": location,
-                "room": room,
-                "name": name,
-                "rent": int(payload.get("rent") or 0),
-                "deposit": int(payload.get("deposit") or 0),
-                "electricity": int(payload.get("electricity") or 0),
-                "electricity_history": {},
-                "pay_day": int(payload.get("pay_day") or 1),
-                "contract_start": payload.get("contract_start") or "",
-                "contract_end": payload.get("contract_end") or "",
-                "last_paid_date": ""
+                "location": location, "room": room, "name": name,
+                "rent": int(payload.get("rent") or 0), "deposit": int(payload.get("deposit") or 0),
+                "electricity": int(payload.get("electricity") or 0), "electricity_history": {},
+                "pay_day": int(payload.get("pay_day") or 1), "contract_start": payload.get("contract_start") or "",
+                "contract_end": payload.get("contract_end") or "", "last_paid_date": ""
             }
             tenants.append(new_tenant)
 
@@ -159,7 +172,7 @@ def handle_web_dispatch():
     return True
 
 # ==========================================
-# ⏰ 每日催繳與到期檢查邏輯 (定時排程觸發)
+# ⏰ 每日催繳與到期檢查邏輯
 # ==========================================
 def check_tenants_and_notify():
     if not bot_token or not chat_id:
@@ -233,7 +246,6 @@ def send_main_menu():
         else:
             location_stats[loc]["unpaid_raw_tenants"].append(t)
 
-    # 頂部主標題
     finance_text = f"👑 <b>房東管理主選單</b>\n\n📊 <b>【{current_year_month} 月收租分區財務報表】</b>\n=============================="
     
     if location_stats:
