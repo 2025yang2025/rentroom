@@ -63,8 +63,9 @@ def handle_web_dispatch():
 
 # 3. 請將你原本的通知函式填入這裡
 def check_tenants_and_notify():
-    # --- 請將你原本檢查租金與發送 Telegram 的邏輯貼在這裡 ---
-    print("正在執行檢查邏輯...")
+    print(f"DEBUG: BOT_TOKEN 是否存在: {'有' if bot_token else '沒有'}")
+    print(f"DEBUG: CHAT_ID 是否存在: {chat_id}")
+    # 如果顯示「沒有」，請到 GitHub Settings -> Secrets and variables -> Actions 確認 Token 名稱是否拼寫錯誤
     pass
 
 def send_main_menu():
