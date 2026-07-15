@@ -20,12 +20,13 @@ chat_id = os.getenv('TG_CHAT_ID')
 today = datetime.today()
 current_year_month = today.strftime('%Y-%m')
 
+# 房號排序專用小工具
 def get_room_number_key(tenant_obj):
     r_name = str(tenant_obj.get('room', '')).replace('房', '').strip()
     try:
-        return (0, int(r_name))
+        return (0, int(r_name)) # 純數字房號優先排序 (如 101, 102)
     except ValueError:
-        return (1, r_name)
+        return (1, r_name)     # 含有文字的排後面 (如 A房, 店面)
 
 # ==========================================
 # 📥 核心功能：處理來自網頁直連的 Dispatch 訊號
@@ -48,14 +49,15 @@ def handle_web_dispatch():
     action_type = payload.get("action_type")
     global tenants
 
-    # 更加嚴格與防錯的字串清理（移除所有空格、特定中文字、並轉小寫）
+    # 強效字串清理：移除所有空格、特定中文字符、括號，並轉小寫
     def clean_str(s):
         if not s:
             return ""
-        # 移除空格、換行、"房"、"地區" 等干擾字眼
-        return "".join(str(s).split()).replace("房", "").replace("地區", "").replace("【", "").replace("】", "").strip().lower()
+        for remove_char in ["房", "地區", "【", "】", " ", "\t", "\n", "\r"]:
+            s = str(s).replace(remove_char, "")
+        return s.strip().lower()
 
-    # ─── 分流 A：確認收到租金 ───
+    # ─── 分流 A：確認收到租金（支援正常收租與提前繳租） ───
     if action_type in ["confirm_receipt", "advance_receipt"]:
         room = str(payload.get("room", "")).strip()
         location = str(payload.get("location", "")).strip()
@@ -83,18 +85,21 @@ def handle_web_dispatch():
             current_room_clean = clean_str(t.get("room", ""))
             current_loc_clean = clean_str(t.get("location", ""))
             
-            # Debug 日誌，方便你在 GitHub Actions 內核對到底哪裡字體不合
             print(f"🔍 比對中 -> 網頁端:[{target_loc_clean}][{target_room_clean}] 🔄 資料庫:[{current_loc_clean}][{current_room_clean}]")
 
-            if current_room_clean == target_room_clean and current_loc_clean == target_loc_clean:
+            # 💡 模糊相容比對：只要地點互相包含（例如 中華西 包含於 中華西606地區），且房號完全一致就放行
+            location_matched = (target_loc_clean in current_loc_clean) or (current_loc_clean in target_loc_clean)
+            room_matched = (target_room_clean == current_room_clean)
+
+            if location_matched and room_matched:
                 t["last_paid_date"] = today_str
-                elec_amount = int(web_elec) if web_elec is not None else t.get('electricity', 0)
+                elec_amount = int(web_elec) if web_elec is not None else int(t.get('electricity') or 0)
                 
                 if "electricity_history" not in t:
                     t["electricity_history"] = {}
                 
                 t["electricity_history"][this_month_key] = elec_amount
-                t["electricity"] = 0 
+                t["electricity"] = 0 # 歸零當期應繳
                 updated = True
                 print(f"✅ 更新成功！[{this_month_key}] 紀錄電費 {elec_amount} 元已歸檔並歸零。")
                 break
@@ -102,7 +107,6 @@ def handle_web_dispatch():
         if not updated:
             err_msg = f"⚠️ 網頁銷帳失敗：找不到對應房間！\n輸入的地點：{location}\n輸入的房號：{room}\n請檢查 json 中的 location 與 room 欄位文字是否完全一致。"
             print(err_msg)
-            # 主動把錯誤發到 Telegram，讓你知道是哪間沒對上
             if bot_token and chat_id:
                 requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": err_msg})
 
@@ -155,7 +159,7 @@ def handle_web_dispatch():
     return True
 
 # ==========================================
-# ⏰ 每日催繳與到期檢查邏輯
+# ⏰ 每日催繳與到期檢查邏輯 (定時排程觸發)
 # ==========================================
 def check_tenants_and_notify():
     if not bot_token or not chat_id:
@@ -229,6 +233,7 @@ def send_main_menu():
         else:
             location_stats[loc]["unpaid_raw_tenants"].append(t)
 
+    # 頂部主標題
     finance_text = f"👑 <b>房東管理主選單</b>\n\n📊 <b>【{current_year_month} 月收租分區財務報表】</b>\n=============================="
     
     if location_stats:
@@ -236,8 +241,8 @@ def send_main_menu():
             sorted_paid_objs = sorted(stats["paid_raw_tenants"], key=get_room_number_key)
             sorted_unpaid_objs = sorted(stats["unpaid_raw_tenants"], key=get_room_number_key)
             
-            exp_r = sum(t.get('rent', 0) for t in stats["raw_tenants_list"])
-            recv_r = sum(t.get('rent', 0) for t in stats["paid_raw_tenants"])
+            exp_r = sum(int(t.get('rent') or 0) for t in stats["raw_tenants_list"])
+            recv_r = sum(int(t.get('rent') or 0) for t in stats["paid_raw_tenants"])
             progress = round((recv_r / exp_r) * 100 if exp_r > 0 else 0, 1)
             
             paid_lines = []
