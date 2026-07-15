@@ -134,10 +134,18 @@ def handle_web_dispatch():
 # 請將你原有的那兩段代碼貼在下面即可
 
 if __name__ == "__main__":
+    # 1. 先執行 Web 訊號處理
     is_web_signal = handle_web_dispatch()
-    # 如果是從網頁發送的訊號，執行完資料更新即可結束，無需重複通知
+    
+    # 2. 如果是排程觸發 (is_web_signal 為 False)，則執行檢查與通知
     if not is_web_signal:
-        # 這裡放入你原本的催繳檢查
-        # check_tenants_and_notify()
-        # send_main_menu()
-        pass
+        print("🕒 開始執行排程檢查與催繳通知...")
+        try:
+            # 確保這裡的函式名稱與你程式碼中定義的完全一致
+            check_tenants_and_notify()
+            send_main_menu()
+            print("✅ 排程通知已成功發送。")
+        except Exception as e:
+            print(f"❌ 排程通知執行失敗: {e}")
+    else:
+        print("📥 網頁訊號處理完畢，本次不執行排程催繳。")
