@@ -2,6 +2,7 @@ import os
 import json
 from datetime import datetime, date, timedelta
 import requests
+import sys
 
 json_path = 'tenants.json'
 try:
@@ -50,12 +51,10 @@ def handle_web_dispatch():
 
     print("📥 偵測到來自網頁的直連訊號 (repository_dispatch)")
     
-    # ─── 修正：從 GitHub 官方事件路徑讀取真正的 payload ───
     try:
         if event_path and os.path.exists(event_path):
             with open(event_path, 'r', encoding='utf-8') as f:
                 event_data = json.load(f)
-            # GitHub 會把網頁的 client_payload 放在 json 的 "client_payload" 欄位下
             payload = event_data.get("client_payload", {})
             print(f"✅ 成功解析 GitHub 官方事件檔案！Payload 內容: {payload}")
         else:
@@ -111,7 +110,6 @@ def handle_web_dispatch():
             current_room_clean = clean_str(t.get("room", ""))
             current_loc_clean = clean_str(t.get("location", ""))
             
-            # 模糊相容比對：地點互相包含且房號完全一致
             location_matched = (target_loc_clean in current_loc_clean) or (current_loc_clean in target_loc_clean)
             room_matched = (target_room_clean == current_room_clean)
 
@@ -232,7 +230,7 @@ def send_main_menu():
     if not bot_token or not chat_id:
         return
 
-    # 計算上個月的年月份字串，用以比對跨月提前繳租的狀況
+    # 計算上個月的年月份字串
     first_day_of_this_month = today.replace(day=1)
     last_month_ym = (first_day_of_this_month - timedelta(days=1)).strftime('%Y-%m')
 
@@ -255,28 +253,25 @@ def send_main_menu():
         last_paid_ym = last_paid_str[:7] if last_paid_str else ""
         p_day = int(t.get('pay_day', 1))
         
-        # ─── 智慧型已收租判定邏輯 ───
         is_paid = False
         
-        # 1. 本月正常收租
+        # 1. 本月有明確繳租紀錄 (包含今天剛剛被網頁更新為今天日期的目標房客)
         if last_paid_ym == current_year_month:
             is_paid = True
             
-        # 2. 上個月底提早繳本月房租（適用於 last_paid_date 為 6/30，而本月為 7 月的房客）
+        # 2. 嚴格比對跨月提前繳租：上次繳租日是上個月底，且「上次繳租的日期」必須晚於或等於「應繳日」
         elif last_paid_ym == last_month_ym:
             try:
                 last_paid_day = int(last_paid_str.split('-')[2])
-                # 若房客在上個月的繳租日前後至月底繳費，視為已付本月帳
-                if last_paid_day >= (p_day - 2):
+                if last_paid_day >= p_day:
                     is_paid = True
             except:
                 pass
                 
-        # 3. 未來月份（超前繳租）
+        # 3. 未來月份
         elif last_paid_ym > current_year_month:
             is_paid = True
 
-        # 依判定結果分流
         if is_paid:
             location_stats[loc]["paid_raw_tenants"].append(t)
         else:
@@ -297,7 +292,6 @@ def send_main_menu():
             for t in sorted_paid_objs:
                 hist = t.get('electricity_history', {})
                 c_elec = hist.get(current_year_month, 0)
-                # 如果當月查不到，試著查找是否歸檔在跨月提前繳的歷史中
                 if c_elec == 0:
                     next_month_date = (today.replace(day=28) + timedelta(days=4))
                     c_elec = hist.get(next_month_date.strftime("%Y-%m"), 0)
@@ -342,6 +336,13 @@ def send_main_menu():
 
 if __name__ == "__main__":
     is_web_signal = handle_web_dispatch()
-    if not is_web_signal:
-        check_tenants_and_notify()
+    
+    # ─── 💡 核心安全鎖：如果是網頁傳來的銷帳訊號，處理完就直接退出 ───
+    # 這樣可以防止網頁按鈕觸發後，因為全域變數殘留去污染到當天其他人的報表狀態。
+    if is_web_signal:
+        print("⚡ 網頁單筆銷帳完成，安全退出程式。")
+        sys.exit(0)
+        
+    # 如果是每日定時的排程（非網頁按鈕），才執行催繳與定期總報表發送
+    check_tenants_and_notify()
     send_main_menu()
