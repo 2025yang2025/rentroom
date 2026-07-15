@@ -26,7 +26,7 @@ def send_tg_error(msg):
     """專用緊急通知工具，確保錯誤一定能傳到手機上"""
     if bot_token and chat_id:
         try:
-            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": msg})
+            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
         except Exception as e:
             print(f"發送 TG 錯誤失敗: {e}")
 
@@ -110,6 +110,7 @@ def handle_web_dispatch():
             current_room_clean = clean_str(t.get("room", ""))
             current_loc_clean = clean_str(t.get("location", ""))
             
+            # 強化比對：雙向包含判定
             location_matched = (target_loc_clean in current_loc_clean) or (current_loc_clean in target_loc_clean)
             room_matched = (target_room_clean == current_room_clean)
 
@@ -124,15 +125,26 @@ def handle_web_dispatch():
                 t["electricity"] = 0 
                 updated = True
                 print(f"✅ 更新成功！[{this_month_key}] 紀錄電費 {elec_amount} 元已歸檔並歸零。")
+                
+                # 💡 新增：銷帳成功即時回報 Telegram
+                if bot_token and chat_id:
+                    success_msg = (
+                        f"✅ <b>【網頁銷帳成功】</b>\n"
+                        f"📍 房間：[{t.get('location')} - {t.get('room')}]\n"
+                        f"👤 房客：{t.get('name')}\n"
+                        f"💰 狀態：{mode_text}已登記 ({this_month_key} 月)"
+                    )
+                    requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": success_msg, "parse_mode": "HTML"})
                 break
         
         if not updated:
-            all_rooms_debug = ", ".join([f"[{t.get('location')}-{t.get('room')}]" for t in tenants])
+            # 💡 新增：銷帳失敗時，詳細列出字串對比與資料庫現有清單
+            all_rooms_debug = "\n".join([f"• <code>[{t.get('location')}]</code> - <code>[{t.get('room')}]</code> ({t.get('name')})" for t in tenants])
             err_msg = (
-                f"⚠️ 網頁銷帳失敗：找不到對應房間！\n"
-                f"網頁輸入地點：{location}\n"
-                f"網頁輸入房號：{room}\n"
-                f"目前資料庫現有房間：\n{all_rooms_debug}"
+                f"❌ <b>網頁銷帳失敗：找不到對應房間！</b>\n\n"
+                f"網頁傳來地點：<code>{location}</code> (整理後: {target_loc_clean})\n"
+                f"網頁傳來房號：<code>{room}</code> (整理後: {target_room_clean})\n\n"
+                f"📋 <b>資料庫目前現有房間：</b>\n{all_rooms_debug}"
             )
             print(err_msg)
             send_tg_error(err_msg)
@@ -230,7 +242,6 @@ def send_main_menu():
     if not bot_token or not chat_id:
         return
 
-    # 計算上個月的年月份字串
     first_day_of_this_month = today.replace(day=1)
     last_month_ym = (first_day_of_this_month - timedelta(days=1)).strftime('%Y-%m')
 
@@ -253,18 +264,16 @@ def send_main_menu():
         last_paid_ym = last_paid_str[:7] if last_paid_str else ""
         p_day = int(t.get('pay_day', 1))
         
-        # ─── 智慧型已收租判定邏輯（已修正今天到期漏洞） ───
         is_paid = False
         
         # 1. 本月有明確繳租紀錄
         if last_paid_ym == current_year_month:
             is_paid = True
             
-        # 2. 上個月底提早繳本月房租（只有在「今天還沒到他的繳租日」之前，才允許用上個月底的紀錄當綠燈）
+        # 2. 上個月底提早繳本月房租（安全鎖：今天日期還沒到他的繳租日，才判定為跨月提早繳款）
         elif last_paid_ym == last_month_ym:
             try:
                 last_paid_day = int(last_paid_str.split('-')[2])
-                # 安全防線：今天日期還沒到他的繳租日，且他上月付款日大於等於應繳日（代表他是提早繳）
                 if today.day < p_day and last_paid_day >= p_day:
                     is_paid = True
             except:
@@ -339,12 +348,11 @@ def send_main_menu():
 if __name__ == "__main__":
     is_web_signal = handle_web_dispatch()
     
-    # ─── 💡 核心安全鎖：如果是網頁傳來的銷帳訊號，處理完就直接退出 ───
-    # 這樣可以防止網頁按鈕觸發後，因為全域變數殘留去污染到當天其他人的報表狀態。
+    # 網頁單筆銷帳完成後直接退出，不再重複發送主報表
     if is_web_signal:
-        print("⚡ 網頁單筆銷帳完成，安全退出程式。")
+        print("⚡ 網頁單筆銷帳處理完畢，安全退出程式。")
         sys.exit(0)
         
-    # 如果是每日定時的排程（非網頁按鈕），才執行催繳與定期總報表發送
+    # 定時排程流程
     check_tenants_and_notify()
     send_main_menu()
