@@ -253,17 +253,19 @@ def send_main_menu():
         last_paid_ym = last_paid_str[:7] if last_paid_str else ""
         p_day = int(t.get('pay_day', 1))
         
+        # ─── 智慧型已收租判定邏輯（已修正今天到期漏洞） ───
         is_paid = False
         
-        # 1. 本月有明確繳租紀錄 (包含今天剛剛被網頁更新為今天日期的目標房客)
+        # 1. 本月有明確繳租紀錄
         if last_paid_ym == current_year_month:
             is_paid = True
             
-        # 2. 嚴格比對跨月提前繳租：上次繳租日是上個月底，且「上次繳租的日期」必須晚於或等於「應繳日」
+        # 2. 上個月底提早繳本月房租（只有在「今天還沒到他的繳租日」之前，才允許用上個月底的紀錄當綠燈）
         elif last_paid_ym == last_month_ym:
             try:
                 last_paid_day = int(last_paid_str.split('-')[2])
-                if last_paid_day >= p_day:
+                # 安全防線：今天日期還沒到他的繳租日，且他上月付款日大於等於應繳日（代表他是提早繳）
+                if today.day < p_day and last_paid_day >= p_day:
                     is_paid = True
             except:
                 pass
