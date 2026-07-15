@@ -1,6 +1,6 @@
 import os
 import json
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import requests
 
 json_path = 'tenants.json'
@@ -89,7 +89,6 @@ def handle_web_dispatch():
         room = str(payload.get("room", "")).strip()
         location = str(payload.get("location", "")).strip()
         
-        from datetime import timedelta
         today_date = date.today()
         today_str = today_date.strftime("%Y-%m-%d")
         
@@ -188,7 +187,6 @@ def check_tenants_and_notify():
     if not bot_token or not chat_id:
         return
 
-    has_notification = False
     for t in tenants:
         if int(t.get('rent') or 0) == 0 or t.get('name') == "待租":
             continue
@@ -220,7 +218,6 @@ def check_tenants_and_notify():
                 ])
 
             if reminders:
-                has_notification = True
                 url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
                 payload = {"chat_id": chat_id, "text": "\n".join(reminders), "parse_mode": "HTML"}
                 if buttons: payload["reply_markup"] = {"inline_keyboard": buttons}
@@ -234,6 +231,10 @@ def check_tenants_and_notify():
 def send_main_menu():
     if not bot_token or not chat_id:
         return
+
+    # 計算上個月的年月份字串，用以比對跨月提前繳租的狀況
+    first_day_of_this_month = today.replace(day=1)
+    last_month_ym = (first_day_of_this_month - timedelta(days=1)).strftime('%Y-%m')
 
     location_stats = {}
     for t in tenants:
@@ -249,9 +250,34 @@ def send_main_menu():
             }
         
         location_stats[loc]["raw_tenants_list"].append(t)
-        last_paid_ym = t.get('last_paid_date', '')[:7] if t.get('last_paid_date') else ""
         
+        last_paid_str = t.get('last_paid_date', '')
+        last_paid_ym = last_paid_str[:7] if last_paid_str else ""
+        p_day = int(t.get('pay_day', 1))
+        
+        # ─── 智慧型已收租判定邏輯 ───
+        is_paid = False
+        
+        # 1. 本月正常收租
         if last_paid_ym == current_year_month:
+            is_paid = True
+            
+        # 2. 上個月底提早繳本月房租（適用於 last_paid_date 為 6/30，而本月為 7 月的房客）
+        elif last_paid_ym == last_month_ym:
+            try:
+                last_paid_day = int(last_paid_str.split('-')[2])
+                # 若房客在上個月的繳租日前後至月底繳費，視為已付本月帳
+                if last_paid_day >= (p_day - 2):
+                    is_paid = True
+            except:
+                pass
+                
+        # 3. 未來月份（超前繳租）
+        elif last_paid_ym > current_year_month:
+            is_paid = True
+
+        # 依判定結果分流
+        if is_paid:
             location_stats[loc]["paid_raw_tenants"].append(t)
         else:
             location_stats[loc]["unpaid_raw_tenants"].append(t)
@@ -271,6 +297,11 @@ def send_main_menu():
             for t in sorted_paid_objs:
                 hist = t.get('electricity_history', {})
                 c_elec = hist.get(current_year_month, 0)
+                # 如果當月查不到，試著查找是否歸檔在跨月提前繳的歷史中
+                if c_elec == 0:
+                    next_month_date = (today.replace(day=28) + timedelta(days=4))
+                    c_elec = hist.get(next_month_date.strftime("%Y-%m"), 0)
+                
                 elec_str = f" / ⚡ 電費:{c_elec}元" if c_elec > 0 else ""
                 deposit_val = t.get('deposit', 0)
                 paid_lines.append(f"🟢 {t.get('room','')} ({t.get('name','')} / {t.get('rent',0)}元 / 押金:{deposit_val}元 / 繳租日:{t.get('pay_day',1)}號{elec_str})")
