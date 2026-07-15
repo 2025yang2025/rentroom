@@ -126,7 +126,7 @@ def handle_web_dispatch():
                 updated = True
                 print(f"✅ 更新成功！[{this_month_key}] 紀錄電費 {elec_amount} 元已歸檔並歸零。")
                 
-                # 💡 新增：銷帳成功即時回報 Telegram
+                # 💡 銷帳成功即時回報 Telegram
                 if bot_token and chat_id:
                     success_msg = (
                         f"✅ <b>【網頁銷帳成功】</b>\n"
@@ -138,7 +138,7 @@ def handle_web_dispatch():
                 break
         
         if not updated:
-            # 💡 新增：銷帳失敗時，詳細列出字串對比與資料庫現有清單
+            # 銷帳失敗時，詳細列出字串對比與資料庫現有清單
             all_rooms_debug = "\n".join([f"• <code>[{t.get('location')}]</code> - <code>[{t.get('room')}]</code> ({t.get('name')})" for t in tenants])
             err_msg = (
                 f"❌ <b>網頁銷帳失敗：找不到對應房間！</b>\n\n"
@@ -270,7 +270,7 @@ def send_main_menu():
         if last_paid_ym == current_year_month:
             is_paid = True
             
-        # 2. 上個月底提早繳本月房租（安全鎖：今天日期還沒到他的繳租日，才判定為跨月提早繳款）
+        # 2. 上個月底提早繳本月房租（安全鎖）
         elif last_paid_ym == last_month_ym:
             try:
                 last_paid_day = int(last_paid_str.split('-')[2])
@@ -348,11 +348,13 @@ def send_main_menu():
 if __name__ == "__main__":
     is_web_signal = handle_web_dispatch()
     
-    # 網頁單筆銷帳完成後直接退出，不再重複發送主報表
+    # ─── 💡 核心安全鎖改動 ───
+    # 當網頁銷帳處理完畢後，先呼叫發送最新報表，接著才安全退出程式。
     if is_web_signal:
-        print("⚡ 網頁單筆銷帳處理完畢，安全退出程式。")
+        print("⚡ 網頁單筆銷帳處理完畢，開始更新並重新發送 Telegram 主報表...")
+        send_main_menu()
         sys.exit(0)
         
-    # 定時排程流程
+    # 定時排程流程（只有非網頁訊號才會跑這裡，避免重複發送）
     check_tenants_and_notify()
     send_main_menu()
