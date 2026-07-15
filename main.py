@@ -42,17 +42,28 @@ def get_room_number_key(tenant_obj):
 # ==========================================
 def handle_web_dispatch():
     event_name = os.getenv("GITHUB_EVENT_NAME", "")
-    client_payload_str = os.getenv("CLIENT_PAYLOAD", "{}")
+    event_path = os.getenv("GITHUB_EVENT_PATH", "")
     
+    # 網頁發送的是 repository_dispatch
     if event_name != "repository_dispatch":
         return False 
 
-    print(f"📥 偵測到來自網頁的直連訊號 (repository_dispatch)，Payload 長度: {len(client_payload_str)}")
+    print("📥 偵測到來自網頁的直連訊號 (repository_dispatch)")
     
+    # ─── 修正：從 GitHub 官方事件路徑讀取真正的 payload ───
     try:
-        payload = json.loads(client_payload_str)
+        if event_path and os.path.exists(event_path):
+            with open(event_path, 'r', encoding='utf-8') as f:
+                event_data = json.load(f)
+            # GitHub 會把網頁的 client_payload 放在 json 的 "client_payload" 欄位下
+            payload = event_data.get("client_payload", {})
+            print(f"✅ 成功解析 GitHub 官方事件檔案！Payload 內容: {payload}")
+        else:
+            print("⚠️ 找不到 GITHUB_EVENT_PATH 檔案，嘗試讀取環境變數...")
+            client_payload_str = os.getenv("CLIENT_PAYLOAD", "{}")
+            payload = json.loads(client_payload_str)
     except Exception as e:
-        err = f"❌ 解析網頁 Payload 失敗: {e}\nPayload 內容: {client_payload_str}"
+        err = f"❌ 解析網頁 Payload 失敗: {e}"
         print(err)
         send_tg_error(err)
         return True
@@ -119,7 +130,6 @@ def handle_web_dispatch():
                 break
         
         if not updated:
-            # 找不到房間時，主動把比對失敗詳情直接發到你的 Telegram
             all_rooms_debug = ", ".join([f"[{t.get('location')}-{t.get('room')}]" for t in tenants])
             err_msg = (
                 f"⚠️ 網頁銷帳失敗：找不到對應房間！\n"
