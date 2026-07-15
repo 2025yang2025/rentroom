@@ -3,7 +3,7 @@ name: Daily Rent & Contract Reminder via Telegram
 on:
   workflow_dispatch:
   repository_dispatch:
-    # 🌟 修正：加入 webhook_event 讓 GitHub 接收網頁發出的請求
+    # 🌟 已經包含網頁發出的請求事件類型
     types: [confirm_receipt, add_tenant, webhook_event] 
   schedule:
     - cron: '0 1 * * *'  
@@ -12,9 +12,11 @@ on:
 
 jobs:
   check-and-notify:
+    # 🛠️ 修正：加入 github.event_name == 'schedule'，確保每天定時催租能正常執行
     if: |
       github.event_name == 'repository_dispatch' || 
       github.event_name == 'workflow_dispatch' || 
+      github.event_name == 'schedule' || 
       (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'rent-action'))
     runs-on: ubuntu-latest
 
@@ -38,6 +40,7 @@ jobs:
         TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
         TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         ISSUE_BODY: ${{ github.event.issue.body }}
+        # 保留作為備用，Python 端已改用更穩定的 GITHUB_EVENT_PATH 讀取
         CLIENT_PAYLOAD: ${{ toJson(github.event.client_payload) }}
       run: python main.py
 
