@@ -70,6 +70,18 @@ def handle_web_dispatch():
     action_type = payload.get("action_type")
     global tenants
 
+    # 💡 診斷雷達 1：一收到訊號，先把網頁傳來的內容噴到 Telegram，確認網頁沒有裝死
+    if bot_token and chat_id:
+        debug_init_msg = (
+            f"📥 <b>【系統已接收網頁訊號】</b>\n"
+            f"⚡ 動作類型：<code>{action_type}</code>\n"
+            f"📍 傳來地點：<code>{payload.get('location')}</code>\n"
+            f"🚪 傳來房號：<code>{payload.get('room')}</code>\n"
+            f"👤 房客名稱：<code>{payload.get('name')}</code>\n"
+            f"⚡ 傳來電費：<code>{payload.get('electricity')}</code>"
+        )
+        requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": debug_init_msg, "parse_mode": "HTML"})
+
     if not action_type:
         err = f"⚠️ 警告：收到的網頁資料中沒有 action_type 欄位！\nPayload: {payload}"
         print(err)
@@ -129,21 +141,22 @@ def handle_web_dispatch():
                 # 💡 銷帳成功即時回報 Telegram
                 if bot_token and chat_id:
                     success_msg = (
-                        f"✅ <b>【網頁銷帳成功】</b>\n"
+                        f"✅ <b>【資料庫寫入成功】</b>\n"
                         f"📍 房間：[{t.get('location')} - {t.get('room')}]\n"
                         f"👤 房客：{t.get('name')}\n"
+                        f"📅 付款日已變更為：<code>{today_str}</code>\n"
                         f"💰 狀態：{mode_text}已登記 ({this_month_key} 月)"
                     )
                     requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={"chat_id": chat_id, "text": success_msg, "parse_mode": "HTML"})
                 break
         
         if not updated:
-            # 銷帳失敗時，詳細列出字串對比與資料庫現有清單
+            # 💡 診斷雷達 2：如果沒對到房間，列出比對細節，抓出是誰有錯字
             all_rooms_debug = "\n".join([f"• <code>[{t.get('location')}]</code> - <code>[{t.get('room')}]</code> ({t.get('name')})" for t in tenants])
             err_msg = (
-                f"❌ <b>網頁銷帳失敗：找不到對應房間！</b>\n\n"
-                f"網頁傳來地點：<code>{location}</code> (整理後: {target_loc_clean})\n"
-                f"網頁傳來房號：<code>{room}</code> (整理後: {target_room_clean})\n\n"
+                f"❌ <b>資料庫比對失敗：找不到對應房間！</b>\n\n"
+                f"網頁傳來地點：<code>{location}</code> (清理後: {target_loc_clean})\n"
+                f"網頁傳來房號：<code>{room}</code> (清理後: {target_room_clean})\n\n"
                 f"📋 <b>資料庫目前現有房間：</b>\n{all_rooms_debug}"
             )
             print(err_msg)
@@ -348,13 +361,10 @@ def send_main_menu():
 if __name__ == "__main__":
     is_web_signal = handle_web_dispatch()
     
-    # ─── 💡 核心安全鎖改動 ───
-    # 當網頁銷帳處理完畢後，先呼叫發送最新報表，接著才安全退出程式。
     if is_web_signal:
-        print("⚡ 網頁單筆銷帳處理完畢，開始更新並重新發送 Telegram 主報表...")
+        print("⚡ 網頁單筆銷帳處理完畢，更新並重新發送 Telegram 主報表...")
         send_main_menu()
         sys.exit(0)
         
-    # 定時排程流程（只有非網頁訊號才會跑這裡，避免重複發送）
     check_tenants_and_notify()
     send_main_menu()
