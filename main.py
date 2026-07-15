@@ -94,10 +94,8 @@ def handle_web_dispatch():
     if action_type == "advance_receipt":
         next_month_date = (today_date.replace(day=28) + timedelta(days=4))
         this_month_key = next_month_date.strftime("%Y-%m")
-        mode_text = "提前繳租"
     else:
         this_month_key = today_str[:7]
-        mode_text = "正常收租"
 
     target_room_clean = clean_str(room)
     target_loc_clean = clean_str(location)
@@ -111,7 +109,7 @@ def handle_web_dispatch():
             existing_tenant = t
             break
 
-    # ─── 核心強固邏輯：只要是已有房客，不管 action_type 是甚麼，一律進行收租銷帳與資料更新 ───
+    # ─── 強固邏輯：只要是已有房客，不管 action_type 是甚麼，一律進行收租銷帳轉綠燈 ───
     if existing_tenant:
         print(f"▶ 執行已有房客資料異動與銷帳: 地點={location}, 房號={room}")
         
@@ -311,11 +309,17 @@ def send_main_menu():
     ]
 
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    
+    # 💡 關鍵修正：將這裡正確用 {"inline_keyboard": ...} 包裹起來
     payload_menu = {
-        "chat_id": chat_id, "text": menu_message, "parse_mode": "HTML",
-        "reply_markup": inline_buttons
+        "chat_id": chat_id, 
+        "text": menu_message, 
+        "parse_mode": "HTML",
+        "reply_markup": {"inline_keyboard": inline_buttons}
     }
-    requests.post(url, json=payload_menu)
+    
+    res = requests.post(url, json=payload_menu)
+    print(f"📊 主選單發送結果: {res.status_code}, 回應: {res.text}")
 
 if __name__ == "__main__":
     is_web_signal = handle_web_dispatch()
