@@ -112,8 +112,12 @@
         "pay_day": 15,
         "contract_start": "2026-05-15",
         "contract_end": "2027-05-14",
-        "last_paid_date": "2026-06-15",
-        "deposit": 17000
+        "last_paid_date": "2026-07-16",
+        "deposit": 17000,
+        "electricity_history": {
+            "2026-07": 1000
+        },
+        "electricity": 0
     },
     {
         "location": "育德500",
