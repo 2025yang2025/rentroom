@@ -45,7 +45,6 @@ def handle_web_dispatch():
     event_name = os.getenv("GITHUB_EVENT_NAME", "")
     event_path = os.getenv("GITHUB_EVENT_PATH", "")
     
-    # 網頁發送的是 repository_dispatch
     if event_name != "repository_dispatch":
         return False 
 
@@ -89,13 +88,6 @@ def handle_web_dispatch():
     
     today_date = date.today()
     today_str = today_date.strftime("%Y-%m-%d")
-    
-    # 判斷歸檔月份
-    if action_type == "advance_receipt":
-        next_month_date = (today_date.replace(day=28) + timedelta(days=4))
-        this_month_key = next_month_date.strftime("%Y-%m")
-    else:
-        this_month_key = today_str[:7]
 
     target_room_clean = clean_str(room)
     target_loc_clean = clean_str(location)
@@ -109,11 +101,11 @@ def handle_web_dispatch():
             existing_tenant = t
             break
 
-    # ─── 強固邏輯：只要是已有房客，不管 action_type 是甚麼，一律進行收租銷帳轉綠燈 ───
+    # ─── 強固邏輯：只要是已有房客，不管 action_type 是甚麼，一律進行銷帳 ───
     if existing_tenant:
         print(f"▶ 執行已有房客資料異動與銷帳: 地點={location}, 房號={room}")
         
-        # 1. 更新基本欄位 (如果有傳的話)
+        # 1. 更新基本欄位
         if payload.get("rent") is not None: existing_tenant["rent"] = int(payload.get("rent"))
         if payload.get("deposit") is not None: existing_tenant["deposit"] = int(payload.get("deposit"))
         if payload.get("pay_day") is not None: existing_tenant["pay_day"] = int(payload.get("pay_day"))
@@ -121,7 +113,16 @@ def handle_web_dispatch():
         if payload.get("contract_end") is not None: existing_tenant["contract_end"] = payload.get("contract_end")
         if name: existing_tenant["name"] = name
 
-        # 2. 自動進行收租銷帳轉綠燈處理
+        # 2. 自動判定銷帳歸屬月份 (解決提前繳租問題)
+        pay_day = int(existing_tenant.get("pay_day", 1))
+        
+        if action_type == "advance_receipt" or (today_date.day > pay_day and existing_tenant.get("last_paid_date", "")[:7] == current_year_month):
+            first_day_next_month = (today_date.replace(day=28) + timedelta(days=4)).replace(day=1)
+            target_month_key = first_day_next_month.strftime("%Y-%m")
+            print(f"⏩ 偵測到提前繳租，將款項歸檔至下個月：{target_month_key}")
+        else:
+            target_month_key = current_year_month
+
         existing_tenant["last_paid_date"] = today_str
         web_elec = payload.get("electricity")
         elec_amount = int(web_elec) if web_elec is not None else int(existing_tenant.get('electricity') or 0)
@@ -129,11 +130,10 @@ def handle_web_dispatch():
         if "electricity_history" not in existing_tenant:
             existing_tenant["electricity_history"] = {}
         
-        existing_tenant["electricity_history"][this_month_key] = elec_amount
+        existing_tenant["electricity_history"][target_month_key] = elec_amount
         existing_tenant["electricity"] = 0 
-        print(f"✅ 自動銷帳成功！[{this_month_key}] 紀錄電費 {elec_amount} 元已歸檔並歸零。")
+        print(f"✅ 自動銷帳成功！[{target_month_key}] 紀錄電費 {elec_amount} 元已歸檔並歸零。")
 
-    # ─── 如果完全找不到房間，且網頁要求是新增 ───
     elif action_type == "add_tenant":
         print(f"▶ 執行【全新房客建立】: {location} - {room}")
         new_tenant = {
@@ -145,7 +145,6 @@ def handle_web_dispatch():
         }
         tenants.append(new_tenant)
     else:
-        # 找不到房間且不是新增動作
         all_rooms_debug = "\n".join([f"• <code>[{t.get('location')}]</code> - <code>[{t.get('room')}]</code> ({t.get('name')})" for t in tenants])
         err_msg = (
             f"❌ <b>比對失敗：找不到對應房間無法銷帳！</b>\n\n"
@@ -206,6 +205,75 @@ def check_tenants_and_notify():
             print(f"💥 處理房間錯誤: {room_error}")
 
 # ==========================================
+# 📄 獨立發送：房客租約到期日報表
+# ==========================================
+def send_contract_expiry_report():
+    if not bot_token or not chat_id:
+        return
+
+    today_date = date.today()
+    contract_lines = []
+
+    # 整理房客資料並計算到期天數
+    tenant_list = []
+    for t in tenants:
+        if int(t.get('rent') or 0) == 0 or t.get('name') == "待租":
+            continue
+        
+        c_end_str = t.get('contract_end', '')
+        days_left = None
+        if c_end_str:
+            try:
+                c_end_date = datetime.strptime(c_end_str, "%Y-%m-%d").date()
+                days_left = (c_end_date - today_date).days
+            except ValueError:
+                pass
+        
+        tenant_list.append({
+            'obj': t,
+            'days_left': days_left if days_left is not None else 9999
+        })
+
+    # 依照剩餘天數由少到多排序（最快到期的排前面）
+    tenant_list.sort(key=lambda x: x['days_left'])
+
+    for item in tenant_list:
+        t = item['obj']
+        days_left = item['days_left']
+        c_start = t.get('contract_start', '未填寫')
+        c_end = t.get('contract_end', '未填寫')
+        loc = t.get('location', '')
+        room = t.get('room', '')
+        name = t.get('name', '')
+
+        if days_left == 9999:
+            status_tag = "⚪ 無到期日資料"
+        elif days_left < 0:
+            status_tag = f"🚨 <b>已逾期 {-days_left} 天</b>"
+        elif days_left <= 30:
+            status_tag = f"⚠️ <b>剩餘 {days_left} 天到期</b>"
+        elif days_left <= 60:
+            status_tag = f"⚡ 剩餘 {days_left} 天"
+        else:
+            status_tag = f"🟢 剩餘 {days_left} 天"
+
+        contract_lines.append(
+            f"📍 <b>[{loc} - {room}]</b> {name}\n"
+            f"📅 租約：<code>{c_start}</code> ~ <code>{c_end}</code>\n"
+            f"⏳ 狀態：{status_tag}\n"
+        )
+
+    if not contract_lines:
+        contract_text = "📑 <b>【房客租約到期總覽】</b>\n\n目前暫無有效房客租約紀錄。"
+    else:
+        contract_text = f"📑 <b>【房客租約到期總覽】</b>\n==============================\n\n" + "\n".join(contract_lines) + "=============================="
+
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    payload = {"chat_id": chat_id, "text": contract_text, "parse_mode": "HTML"}
+    res = requests.post(url, json=payload)
+    print(f"📄 租約到期報表發送結果: {res.status_code}")
+
+# ==========================================
 # 📊 報表功能：發送主選單與財務總表
 # ==========================================
 def send_main_menu():
@@ -236,11 +304,8 @@ def send_main_menu():
         
         is_paid = False
         
-        # 1. 本月有明確繳租紀錄
         if last_paid_ym == current_year_month:
             is_paid = True
-            
-        # 2. 上個月底提早繳本月房租（安全鎖）
         elif last_paid_ym == last_month_ym:
             try:
                 last_paid_day = int(last_paid_str.split('-')[2])
@@ -248,8 +313,6 @@ def send_main_menu():
                     is_paid = True
             except:
                 pass
-                
-        # 3. 未來月份
         elif last_paid_ym > current_year_month:
             is_paid = True
 
@@ -309,8 +372,6 @@ def send_main_menu():
     ]
 
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    
-    # 💡 關鍵修正：將這裡正確用 {"inline_keyboard": ...} 包裹起來
     payload_menu = {
         "chat_id": chat_id, 
         "text": menu_message, 
@@ -319,15 +380,17 @@ def send_main_menu():
     }
     
     res = requests.post(url, json=payload_menu)
-    print(f"📊 主選單發送結果: {res.status_code}, 回應: {res.text}")
+    print(f"📊 主選單發送結果: {res.status_code}")
 
 if __name__ == "__main__":
     is_web_signal = handle_web_dispatch()
     
     if is_web_signal:
-        print("⚡ 網頁銷帳處理完畢，更新並重新發送 Telegram 主報表...")
+        print("⚡ 網頁銷帳處理完畢，發送租約到期報表與最新主選單...")
+        send_contract_expiry_report()
         send_main_menu()
         sys.exit(0)
         
     check_tenants_and_notify()
+    send_contract_expiry_report()
     send_main_menu()
