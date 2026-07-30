@@ -22,6 +22,10 @@ chat_id = os.getenv('TG_CHAT_ID')
 today = datetime.today()
 current_year_month = today.strftime('%Y-%m')
 
+# 計算下個月的 YYYY-MM
+next_month_date = (today.replace(day=28) + timedelta(days=4)).replace(day=1)
+next_year_month = next_month_date.strftime('%Y-%m')
+
 def send_tg_error(msg):
     """專用緊急通知工具，確保錯誤一定能傳到手機上"""
     if bot_token and chat_id:
@@ -101,7 +105,6 @@ def handle_web_dispatch():
             existing_tenant = t
             break
 
-    # ─── 強固邏輯：只要是已有房客，不管 action_type 是甚麼，一律進行銷帳 ───
     if existing_tenant:
         print(f"▶ 執行已有房客資料異動與銷帳: 地點={location}, 房號={room}")
         
@@ -113,13 +116,12 @@ def handle_web_dispatch():
         if payload.get("contract_end") is not None: existing_tenant["contract_end"] = payload.get("contract_end")
         if name: existing_tenant["name"] = name
 
-        # 2. 自動判定銷帳歸屬月份 (解決提前繳租問題)
+        # 2. 自動判定銷帳歸屬月份 (提前繳租一律歸檔至下個月)
         pay_day = int(existing_tenant.get("pay_day", 1))
         
-        if action_type == "advance_receipt" or (today_date.day > pay_day and existing_tenant.get("last_paid_date", "")[:7] == current_year_month):
-            first_day_next_month = (today_date.replace(day=28) + timedelta(days=4)).replace(day=1)
-            target_month_key = first_day_next_month.strftime("%Y-%m")
-            print(f"⏩ 偵測到提前繳租，將款項歸檔至下個月：{target_month_key}")
+        if action_type == "advance_receipt" or (today_date.day >= 20 and pay_day <= 15):
+            target_month_key = next_year_month
+            print(f"⏩ 偵測到提前繳租，將款項與電費紀錄歸檔至下個月：{target_month_key}")
         else:
             target_month_key = current_year_month
 
@@ -214,7 +216,6 @@ def send_contract_expiry_report():
     today_date = date.today()
     contract_lines = []
 
-    # 整理房客資料並計算到期天數
     tenant_list = []
     for t in tenants:
         if int(t.get('rent') or 0) == 0 or t.get('name') == "待租":
@@ -234,7 +235,6 @@ def send_contract_expiry_report():
             'days_left': days_left if days_left is not None else 9999
         })
 
-    # 依照剩餘天數由少到多排序（最快到期的排前面）
     tenant_list.sort(key=lambda x: x['days_left'])
 
     for item in tenant_list:
@@ -303,6 +303,7 @@ def send_main_menu():
         p_day = int(t.get('pay_day', 1))
         
         is_paid = False
+        advance_flag = ""
         
         if last_paid_ym == current_year_month:
             is_paid = True
@@ -313,10 +314,13 @@ def send_main_menu():
                     is_paid = True
             except:
                 pass
-        elif last_paid_ym > current_year_month:
+        elif last_paid_ym >= next_year_month:
+            # 判斷是否為預繳下個月
             is_paid = True
+            advance_flag = f" [預繳 {last_paid_ym}]"
 
         if is_paid:
+            t["_advance_flag"] = advance_flag
             location_stats[loc]["paid_raw_tenants"].append(t)
         else:
             location_stats[loc]["unpaid_raw_tenants"].append(t)
@@ -335,14 +339,15 @@ def send_main_menu():
             paid_lines = []
             for t in sorted_paid_objs:
                 hist = t.get('electricity_history', {})
+                # 優先抓取當月電費，若無則抓取下個月電費
                 c_elec = hist.get(current_year_month, 0)
                 if c_elec == 0:
-                    next_month_date = (today.replace(day=28) + timedelta(days=4))
-                    c_elec = hist.get(next_month_date.strftime("%Y-%m"), 0)
+                    c_elec = hist.get(next_year_month, 0)
                 
+                adv_text = t.get("_advance_flag", "")
                 elec_str = f" / ⚡ 電費:{c_elec}元" if c_elec > 0 else ""
                 deposit_val = t.get('deposit', 0)
-                paid_lines.append(f"🟢 {t.get('room','')} ({t.get('name','')} / {t.get('rent',0)}元 / 押金:{deposit_val}元 / 繳租日:{t.get('pay_day',1)}號{elec_str})")
+                paid_lines.append(f"🟢 {t.get('room','')} ({t.get('name','')} / {t.get('rent',0)}元{adv_text} / 押金:{deposit_val}元 / 繳租日:{t.get('pay_day',1)}號{elec_str})")
             paid_summary = "\n".join(paid_lines) if paid_lines else "   <i>暫無紀錄</i>"
             
             unpaid_lines = []
