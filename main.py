@@ -116,16 +116,18 @@ def handle_web_dispatch():
         if payload.get("contract_end") is not None: existing_tenant["contract_end"] = payload.get("contract_end")
         if name: existing_tenant["name"] = name
 
-        # 2. 自動判定銷帳歸屬月份 (提前繳租一律歸檔至下個月)
+        # 2. 自動判定銷帳歸屬月份 (提前繳租時，直接寫入下個月的 1 號作為最後繳租日)
         pay_day = int(existing_tenant.get("pay_day", 1))
         
         if action_type == "advance_receipt" or (today_date.day >= 20 and pay_day <= 15):
             target_month_key = next_year_month
-            print(f"⏩ 偵測到提前繳租，將款項與電費紀錄歸檔至下個月：{target_month_key}")
+            # 強制將最後付款日寫入下個月的 01 日，讓系統明確辨識為下個月已繳
+            existing_tenant["last_paid_date"] = f"{next_year_month}-01"
+            print(f"⏩ 偵測到提前繳租，將款項與 last_paid_date 設定為下個月：{existing_tenant['last_paid_date']}")
         else:
             target_month_key = current_year_month
+            existing_tenant["last_paid_date"] = today_str
 
-        existing_tenant["last_paid_date"] = today_str
         web_elec = payload.get("electricity")
         elec_amount = int(web_elec) if web_elec is not None else int(existing_tenant.get('electricity') or 0)
         
@@ -182,7 +184,7 @@ def check_tenants_and_notify():
             p_day = t.get('pay_day', 1)
             last_paid_ym = t.get('last_paid_date', '')[:7] if t.get('last_paid_date') else ""
             
-            if today.day >= p_day and last_paid_ym != current_year_month:
+            if today.day >= p_day and last_paid_ym != current_year_month and last_paid_ym < next_year_month:
                 status_label = f"📅 <b>【今日繳租提醒 (每月 {p_day} 日)】</b>" if today.day == p_day else f"🚨 ⚠️ <b>【未收租催繳 (逾期)】</b>"
                 reminders.append(
                     f"{loc_room}\n"
@@ -315,9 +317,9 @@ def send_main_menu():
             except:
                 pass
         elif last_paid_ym >= next_year_month:
-            # 判斷是否為預繳下個月
+            # 判斷為預繳下個月（或更之後）
             is_paid = True
-            advance_flag = f" [預繳 {last_paid_ym}]"
+            advance_flag = f" <b>[預繳 {last_paid_ym}]</b>"
 
         if is_paid:
             t["_advance_flag"] = advance_flag
