@@ -121,7 +121,6 @@ def handle_web_dispatch():
         
         if action_type == "advance_receipt" or (today_date.day >= 20 and pay_day <= 15):
             target_month_key = next_year_month
-            # 強制將最後付款日寫入下個月的 01 日，讓系統明確辨識為下個月已繳
             existing_tenant["last_paid_date"] = f"{next_year_month}-01"
             print(f"⏩ 偵測到提前繳租，將款項與 last_paid_date 設定為下個月：{existing_tenant['last_paid_date']}")
         else:
@@ -184,7 +183,8 @@ def check_tenants_and_notify():
             p_day = t.get('pay_day', 1)
             last_paid_ym = t.get('last_paid_date', '')[:7] if t.get('last_paid_date') else ""
             
-            if today.day >= p_day and last_paid_ym != current_year_month and last_paid_ym < next_year_month:
+            # 只有在「今天日數 >= 繳租日」且「當月(或更之後)尚未繳租」時，才發送當日催繳通知
+            if today.day >= p_day and last_paid_ym < current_year_month:
                 status_label = f"📅 <b>【今日繳租提醒 (每月 {p_day} 日)】</b>" if today.day == p_day else f"🚨 ⚠️ <b>【未收租催繳 (逾期)】</b>"
                 reminders.append(
                     f"{loc_room}\n"
@@ -282,9 +282,6 @@ def send_main_menu():
     if not bot_token or not chat_id:
         return
 
-    first_day_of_this_month = today.replace(day=1)
-    last_month_ym = (first_day_of_this_month - timedelta(days=1)).strftime('%Y-%m')
-
     location_stats = {}
     for t in tenants:
         if int(t.get('rent') or 0) == 0 or t.get('name') == "待租":
@@ -302,22 +299,14 @@ def send_main_menu():
         
         last_paid_str = t.get('last_paid_date', '')
         last_paid_ym = last_paid_str[:7] if last_paid_str else ""
-        p_day = int(t.get('pay_day', 1))
         
         is_paid = False
         advance_flag = ""
         
+        # 嚴格判斷：最後繳租月份必須「等於或大於當前系統月份」才算已繳
         if last_paid_ym == current_year_month:
             is_paid = True
-        elif last_paid_ym == last_month_ym:
-            try:
-                last_paid_day = int(last_paid_str.split('-')[2])
-                if today.day < p_day and last_paid_day >= p_day:
-                    is_paid = True
-            except:
-                pass
-        elif last_paid_ym >= next_year_month:
-            # 判斷為預繳下個月（或更之後）
+        elif last_paid_ym > current_year_month:
             is_paid = True
             advance_flag = f" <b>[預繳 {last_paid_ym}]</b>"
 
@@ -341,7 +330,6 @@ def send_main_menu():
             paid_lines = []
             for t in sorted_paid_objs:
                 hist = t.get('electricity_history', {})
-                # 優先抓取當月電費，若無則抓取下個月電費
                 c_elec = hist.get(current_year_month, 0)
                 if c_elec == 0:
                     c_elec = hist.get(next_year_month, 0)
