@@ -38,12 +38,13 @@
         "pay_day": 1,
         "contract_start": "2025-10-01",
         "contract_end": "2026-09-30",
-        "last_paid_date": "2026-07-01",
+        "last_paid_date": "2026-08-01",
         "deposit": 16000,
         "electricity_history": {
-            "2026-07": 1555
+            "2026-07": 1555,
+            "2026-08": 1175
         },
-        "electricity": 1555
+        "electricity": 0
     },
     {
         "location": "中華西606",
