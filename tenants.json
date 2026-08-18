@@ -147,10 +147,10 @@
         "pay_day": 15,
         "contract_start": "2026-06-15",
         "contract_end": "2027-07-14",
-        "last_paid_date": "2026-08-10",
+        "last_paid_date": "2026-08-18",
         "deposit": 18000,
         "electricity_history": {
-            "2026-08": 0
+            "2026-08": 690
         },
         "electricity": 0
     },
