@@ -116,16 +116,16 @@ def handle_web_dispatch():
         if payload.get("contract_end") is not None: existing_tenant["contract_end"] = payload.get("contract_end")
         if name: existing_tenant["name"] = name
 
-        # 2. 自動判定銷帳歸屬月份 (提前繳租時，直接寫入下個月的 1 號作為最後繳租日)
-        pay_day = int(existing_tenant.get("pay_day", 1))
-        
-        if action_type == "advance_receipt" or (today_date.day >= 20 and pay_day <= 15):
+        # 2. 精準判定銷帳歸屬月份
+        # 只有「明確按提前繳租 (advance_receipt)」才算下個月；其餘只要當月發生的收租，一律計入「當月補繳/銷帳」
+        if action_type == "advance_receipt":
             target_month_key = next_year_month
             existing_tenant["last_paid_date"] = f"{next_year_month}-01"
-            print(f"⏩ 偵測到提前繳租，將款項與 last_paid_date 設定為下個月：{existing_tenant['last_paid_date']}")
+            print(f"⏩ 明確點選【提前繳租】，將款項與 last_paid_date 設定為下個月：{existing_tenant['last_paid_date']}")
         else:
             target_month_key = current_year_month
             existing_tenant["last_paid_date"] = today_str
+            print(f"🟢 正常/延遲收租銷帳，款項與 last_paid_date 計入當月：{existing_tenant['last_paid_date']}")
 
         web_elec = payload.get("electricity")
         elec_amount = int(web_elec) if web_elec is not None else int(existing_tenant.get('electricity') or 0)
