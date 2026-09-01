@@ -117,7 +117,6 @@ def handle_web_dispatch():
         if name: existing_tenant["name"] = name
 
         # 2. 精準判定銷帳歸屬月份
-        # 只有「明確按提前繳租 (advance_receipt)」才算下個月；其餘只要當月發生的收租，一律計入「當月補繳/銷帳」
         if action_type == "advance_receipt":
             target_month_key = next_year_month
             existing_tenant["last_paid_date"] = f"{next_year_month}-01"
@@ -163,14 +162,15 @@ def handle_web_dispatch():
     return True
 
 # ==========================================
-# ⏰ 每日催繳與到期檢查邏輯
+# ⏰ 每日催繳檢查（跳過待租）
 # ==========================================
 def check_tenants_and_notify():
     if not bot_token or not chat_id:
         return
 
     for t in tenants:
-        if int(t.get('rent') or 0) == 0 or t.get('name') == "待租":
+        # 跳過空房或待租房間
+        if t.get('name') == "待租" or int(t.get('rent') or 0) == 0:
             continue
             
         try:
@@ -183,7 +183,6 @@ def check_tenants_and_notify():
             p_day = t.get('pay_day', 1)
             last_paid_ym = t.get('last_paid_date', '')[:7] if t.get('last_paid_date') else ""
             
-            # 只有在「今天日數 >= 繳租日」且「當月(或更之後)尚未繳租」時，才發送當日催繳通知
             if today.day >= p_day and last_paid_ym < current_year_month:
                 status_label = f"📅 <b>【今日繳租提醒 (每月 {p_day} 日)】</b>" if today.day == p_day else f"🚨 ⚠️ <b>【未收租催繳 (逾期)】</b>"
                 reminders.append(
@@ -209,7 +208,7 @@ def check_tenants_and_notify():
             print(f"💥 處理房間錯誤: {room_error}")
 
 # ==========================================
-# 📄 獨立發送：房客租約到期日報表
+# 📄 房客租約到期日報表（含待租標示）
 # ==========================================
 def send_contract_expiry_report():
     if not bot_token or not chat_id:
@@ -220,9 +219,10 @@ def send_contract_expiry_report():
 
     tenant_list = []
     for t in tenants:
-        if int(t.get('rent') or 0) == 0 or t.get('name') == "待租":
+        if t.get('name') == "待租":
+            tenant_list.append({'obj': t, 'days_left': 99999}) # 待租排在最後
             continue
-        
+            
         c_end_str = t.get('contract_end', '')
         days_left = None
         if c_end_str:
@@ -248,25 +248,32 @@ def send_contract_expiry_report():
         room = t.get('room', '')
         name = t.get('name', '')
 
-        if days_left == 9999:
-            status_tag = "⚪ 無到期日資料"
-        elif days_left < 0:
-            status_tag = f"🚨 <b>已逾期 {-days_left} 天</b>"
-        elif days_left <= 30:
-            status_tag = f"⚠️ <b>剩餘 {days_left} 天到期</b>"
-        elif days_left <= 60:
-            status_tag = f"⚡ 剩餘 {days_left} 天"
+        if name == "待租":
+            status_tag = "⚪ <b>待租中 (無租約)</b>"
+            contract_lines.append(
+                f"📍 <b>[{loc} - {room}]</b> ⚪ 待租中\n"
+                f"⏳ 狀態：{status_tag}\n"
+            )
         else:
-            status_tag = f"🟢 剩餘 {days_left} 天"
+            if days_left == 9999:
+                status_tag = "⚪ 無到期日資料"
+            elif days_left < 0:
+                status_tag = f"🚨 <b>已逾期 {-days_left} 天</b>"
+            elif days_left <= 30:
+                status_tag = f"⚠️ <b>剩餘 {days_left} 天到期</b>"
+            elif days_left <= 60:
+                status_tag = f"⚡ 剩餘 {days_left} 天"
+            else:
+                status_tag = f"🟢 剩餘 {days_left} 天"
 
-        contract_lines.append(
-            f"📍 <b>[{loc} - {room}]</b> {name}\n"
-            f"📅 租約：<code>{c_start}</code> ~ <code>{c_end}</code>\n"
-            f"⏳ 狀態：{status_tag}\n"
-        )
+            contract_lines.append(
+                f"📍 <b>[{loc} - {room}]</b> {name}\n"
+                f"📅 租約：<code>{c_start}</code> ~ <code>{c_end}</code>\n"
+                f"⏳ 狀態：{status_tag}\n"
+            )
 
     if not contract_lines:
-        contract_text = "📑 <b>【房客租約到期總覽】</b>\n\n目前暫無有效房客租約紀錄。"
+        contract_text = "📑 <b>【房客租約到期總覽】</b>\n\n目前暫無房期紀錄。"
     else:
         contract_text = f"📑 <b>【房客租約到期總覽】</b>\n==============================\n\n" + "\n".join(contract_lines) + "=============================="
 
@@ -276,7 +283,7 @@ def send_contract_expiry_report():
     print(f"📄 租約到期報表發送結果: {res.status_code}")
 
 # ==========================================
-# 📊 報表功能：發送主選單與財務總表
+# 📊 報表功能：發送主選單與財務總表（含待租分組）
 # ==========================================
 def send_main_menu():
     if not bot_token or not chat_id:
@@ -284,17 +291,20 @@ def send_main_menu():
 
     location_stats = {}
     for t in tenants:
-        if int(t.get('rent') or 0) == 0 or t.get('name') == "待租":
-            continue
-
         loc = t.get('location', '未分類').strip()
         if loc not in location_stats:
             location_stats[loc] = {
                 "paid_raw_tenants": [],   
                 "unpaid_raw_tenants": [], 
+                "vacant_tenants": [], # 待租清單
                 "raw_tenants_list": []
             }
         
+        # 待租房間獨立處理，不計入應收租金分子分母
+        if t.get('name') == "待租":
+            location_stats[loc]["vacant_tenants"].append(t)
+            continue
+
         location_stats[loc]["raw_tenants_list"].append(t)
         
         last_paid_str = t.get('last_paid_date', '')
@@ -303,7 +313,6 @@ def send_main_menu():
         is_paid = False
         advance_flag = ""
         
-        # 嚴格判斷：最後繳租月份必須「等於或大於當前系統月份」才算已繳
         if last_paid_ym == current_year_month:
             is_paid = True
         elif last_paid_ym > current_year_month:
@@ -322,11 +331,13 @@ def send_main_menu():
         for loc, stats in location_stats.items():
             sorted_paid_objs = sorted(stats["paid_raw_tenants"], key=get_room_number_key)
             sorted_unpaid_objs = sorted(stats["unpaid_raw_tenants"], key=get_room_number_key)
+            sorted_vacant_objs = sorted(stats["vacant_tenants"], key=get_room_number_key)
             
             exp_r = sum(int(t.get('rent') or 0) for t in stats["raw_tenants_list"])
             recv_r = sum(int(t.get('rent') or 0) for t in stats["paid_raw_tenants"])
             progress = round((recv_r / exp_r) * 100 if exp_r > 0 else 0, 1)
             
+            # 1. 已收租
             paid_lines = []
             for t in sorted_paid_objs:
                 hist = t.get('electricity_history', {})
@@ -340,6 +351,7 @@ def send_main_menu():
                 paid_lines.append(f"🟢 {t.get('room','')} ({t.get('name','')} / {t.get('rent',0)}元{adv_text} / 押金:{deposit_val}元 / 繳租日:{t.get('pay_day',1)}號{elec_str})")
             paid_summary = "\n".join(paid_lines) if paid_lines else "   <i>暫無紀錄</i>"
             
+            # 2. 未收租
             unpaid_lines = []
             for t in sorted_unpaid_objs:
                 curr_elec = t.get('electricity', 0)
@@ -348,12 +360,19 @@ def send_main_menu():
                 unpaid_lines.append(f"🔴 {t.get('room','')} ({t.get('name','')} / {t.get('rent',0)}元 / 押金:{deposit_val}元 / 繳租日:{t.get('pay_day',1)}號{elec_str})")
             unpaid_summary = "\n".join(unpaid_lines) if unpaid_lines else "   ✨ <i>全數繳齊！</i>"
             
+            # 3. 待租中
+            vacant_lines = []
+            for t in sorted_vacant_objs:
+                vacant_lines.append(f"⚪ {t.get('room','')} (待租中)")
+            vacant_summary = f"\n⚪ <b>待租房間：</b>\n" + "\n".join(vacant_lines) if vacant_lines else ""
+
             finance_text += (
                 f"\n📍 <b>【{loc}地區】財務統計</b>\n"
                 f"💰 實收租金：<b>{recv_r} / {exp_r} 元</b>\n"
                 f"📈 租金進度：{progress:0.1f}%\n\n"
                 f"✅ <b>已收租房間：</b>\n{paid_summary}\n"
-                f"⚠️ <b>未收租房間：</b>\n{unpaid_summary}\n"
+                f"⚠️ <b>未收租房間：</b>\n{unpaid_summary}"
+                f"{vacant_summary}\n"
                 f"=============================="
             )
 
