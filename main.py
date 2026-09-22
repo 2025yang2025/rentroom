@@ -162,14 +162,13 @@ def handle_web_dispatch():
     return True
 
 # ==========================================
-# ⏰ 每日催繳檢查（跳過待租）
+# ⏰ 每日催繳檢查（個別針對租金或電費未繳發出提醒）
 # ==========================================
 def check_tenants_and_notify():
     if not bot_token or not chat_id:
         return
 
     for t in tenants:
-        # 跳過空房或待租房間
         if t.get('name') == "待租" or int(t.get('rent') or 0) == 0:
             continue
             
@@ -178,24 +177,34 @@ def check_tenants_and_notify():
             reminders = []
             buttons = []
             
-            elec_amount = t.get('electricity', 0)
-            elec_text = f" + ⚡ 電費:{elec_amount}元" if elec_amount > 0 else ""
             p_day = t.get('pay_day', 1)
             last_paid_ym = t.get('last_paid_date', '')[:7] if t.get('last_paid_date') else ""
+            elec_amount = int(t.get('electricity') or 0)
             
-            if today.day >= p_day and last_paid_ym < current_year_month:
-                status_label = f"📅 <b>【今日繳租提醒 (每月 {p_day} 日)】</b>" if today.day == p_day else f"🚨 ⚠️ <b>【未收租催繳 (逾期)】</b>"
+            rent_unpaid = (today.day >= p_day and last_paid_ym < current_year_month)
+            elec_unpaid = (elec_amount > 0)
+            
+            if rent_unpaid or elec_unpaid:
+                status_items = []
+                if rent_unpaid:
+                    status_items.append(f"🏠 租金未繳：<b>{t['rent']} 元</b>")
+                if elec_unpaid:
+                    status_items.append(f"⚡ 電費未繳：<b>{elec_amount} 元</b>")
+                
+                status_str = " + ".join(status_items)
+                title_label = f"📅 <b>【繳費提醒 (每月 {p_day} 日)】</b>" if today.day == p_day else f"🚨 ⚠️ <b>【未清款項催繳】</b>"
+                
                 reminders.append(
                     f"{loc_room}\n"
                     f"👤 房客：{t['name']} (每月 {p_day} 日繳租)\n"
-                    f"💡 狀態：{status_label} 尚未登記 {current_year_month} 月款項！\n"
-                    f"💰 應繳金額：租金 {t['rent']} 元{elec_text}\n"
+                    f"💡 狀態：{title_label}\n"
+                    f"💰 待繳項目：{status_str}\n"
                     f"📅 上次付款日：<code>{t.get('last_paid_date') or '無紀錄'}</code>"
                 )
                 
                 base_url = f"https://2025yang2025.github.io/rent-form/add.html?tab=advance&location={t['location']}&room={t['room']}&name={t['name']}&rent={t['rent']}&pay_day={p_day}"
                 buttons.append([
-                    {"text": f"🟢 正常收租 ({t['name']})", "url": f"{base_url}&action=confirm"},
+                    {"text": f"🟢 登記銷帳 ({t['name']})", "url": f"{base_url}&action=confirm"},
                     {"text": f"⏩ 提前繳租 ({t['name']})", "url": f"{base_url}&action=advance"}
                 ])
 
@@ -208,7 +217,7 @@ def check_tenants_and_notify():
             print(f"💥 處理房間錯誤: {room_error}")
 
 # ==========================================
-# 📄 房客租約到期日報表（含待租標示）
+# 📄 房客租約到期日報表
 # ==========================================
 def send_contract_expiry_report():
     if not bot_token or not chat_id:
@@ -220,7 +229,7 @@ def send_contract_expiry_report():
     tenant_list = []
     for t in tenants:
         if t.get('name') == "待租":
-            tenant_list.append({'obj': t, 'days_left': 99999}) # 待租排在最後
+            tenant_list.append({'obj': t, 'days_left': 99999})
             continue
             
         c_end_str = t.get('contract_end', '')
@@ -283,7 +292,7 @@ def send_contract_expiry_report():
     print(f"📄 租約到期報表發送結果: {res.status_code}")
 
 # ==========================================
-# 📊 報表功能：發送主選單與財務總表（含待租分組）
+# 📊 報表功能：發送雙指示燈（租金燈 + 電費燈）主選單
 # ==========================================
 def send_main_menu():
     if not bot_token or not chat_id:
@@ -294,13 +303,12 @@ def send_main_menu():
         loc = t.get('location', '未分類').strip()
         if loc not in location_stats:
             location_stats[loc] = {
-                "paid_raw_tenants": [],   
-                "unpaid_raw_tenants": [], 
-                "vacant_tenants": [], # 待租清單
+                "paid_rent_tenants": [],   
+                "unpaid_rent_tenants": [], 
+                "vacant_tenants": [], 
                 "raw_tenants_list": []
             }
         
-        # 待租房間獨立處理，不計入應收租金分子分母
         if t.get('name') == "待租":
             location_stats[loc]["vacant_tenants"].append(t)
             continue
@@ -310,57 +318,59 @@ def send_main_menu():
         last_paid_str = t.get('last_paid_date', '')
         last_paid_ym = last_paid_str[:7] if last_paid_str else ""
         
-        is_paid = False
-        advance_flag = ""
-        
-        if last_paid_ym == current_year_month:
-            is_paid = True
-        elif last_paid_ym > current_year_month:
-            is_paid = True
-            advance_flag = f" <b>[預繳 {last_paid_ym}]</b>"
-
-        if is_paid:
-            t["_advance_flag"] = advance_flag
-            location_stats[loc]["paid_raw_tenants"].append(t)
+        # 判斷租金是否已繳
+        if last_paid_ym >= current_year_month:
+            if last_paid_ym > current_year_month:
+                t["_rent_status_light"] = f"⏩預繳({last_paid_ym})"
+            else:
+                t["_rent_status_light"] = "🟢已繳"
+            location_stats[loc]["paid_rent_tenants"].append(t)
         else:
-            location_stats[loc]["unpaid_raw_tenants"].append(t)
+            t["_rent_status_light"] = f"🔴未繳 {t.get('rent', 0)}元"
+            location_stats[loc]["unpaid_rent_tenants"].append(t)
 
     finance_text = f"👑 <b>房東管理主選單</b>\n\n📊 <b>【{current_year_month} 月收租分區財務報表】</b>\n=============================="
     
     if location_stats:
         for loc, stats in location_stats.items():
-            sorted_paid_objs = sorted(stats["paid_raw_tenants"], key=get_room_number_key)
-            sorted_unpaid_objs = sorted(stats["unpaid_raw_tenants"], key=get_room_number_key)
+            sorted_paid_objs = sorted(stats["paid_rent_tenants"], key=get_room_number_key)
+            sorted_unpaid_objs = sorted(stats["unpaid_rent_tenants"], key=get_room_number_key)
             sorted_vacant_objs = sorted(stats["vacant_tenants"], key=get_room_number_key)
             
             exp_r = sum(int(t.get('rent') or 0) for t in stats["raw_tenants_list"])
-            recv_r = sum(int(t.get('rent') or 0) for t in stats["paid_raw_tenants"])
+            recv_r = sum(int(t.get('rent') or 0) for t in stats["paid_rent_tenants"])
             progress = round((recv_r / exp_r) * 100 if exp_r > 0 else 0, 1)
             
-            # 1. 已收租
-            paid_lines = []
-            for t in sorted_paid_objs:
-                hist = t.get('electricity_history', {})
+            # 輔助函式：計算電費指示燈
+            def get_elec_light(t_obj):
+                curr_elec = int(t_obj.get('electricity') or 0)
+                if curr_elec > 0:
+                    return f"⚡未繳 {curr_elec}元"
+                hist = t_obj.get('electricity_history', {})
                 c_elec = hist.get(current_year_month, 0)
                 if c_elec == 0:
                     c_elec = hist.get(next_year_month, 0)
-                
-                adv_text = t.get("_advance_flag", "")
-                elec_str = f" / ⚡ 電費:{c_elec}元" if c_elec > 0 else ""
-                deposit_val = t.get('deposit', 0)
-                paid_lines.append(f"🟢 {t.get('room','')} ({t.get('name','')} / {t.get('rent',0)}元{adv_text} / 押金:{deposit_val}元 / 繳租日:{t.get('pay_day',1)}號{elec_str})")
-            paid_summary = "\n".join(paid_lines) if paid_lines else "   <i>暫無紀錄</i>"
+                if c_elec > 0:
+                    return f"🟢已繳 ({c_elec}元)"
+                return "🟢清空"
+
+            # 1. 租金已繳（或預繳）房間
+            paid_lines = []
+            for t in sorted_paid_objs:
+                r_light = t.get("_rent_status_light", "🟢已繳")
+                e_light = get_elec_light(t)
+                paid_lines.append(f"🟢 {t.get('room','')} ({t.get('name','')})｜租金:{r_light}｜電費:{e_light}")
+            paid_summary = "\n".join(paid_lines) if paid_lines else "   <i>無</i>"
             
-            # 2. 未收租
+            # 2. 租金未繳房間
             unpaid_lines = []
             for t in sorted_unpaid_objs:
-                curr_elec = t.get('electricity', 0)
-                elec_str = f" / ⚡ 電費:{curr_elec}元" if curr_elec > 0 else ""
-                deposit_val = t.get('deposit', 0)
-                unpaid_lines.append(f"🔴 {t.get('room','')} ({t.get('name','')} / {t.get('rent',0)}元 / 押金:{deposit_val}元 / 繳租日:{t.get('pay_day',1)}號{elec_str})")
+                r_light = t.get("_rent_status_light", "🔴未繳")
+                e_light = get_elec_light(t)
+                unpaid_lines.append(f"🔴 {t.get('room','')} ({t.get('name','')})｜租金:{r_light}｜電費:{e_light}")
             unpaid_summary = "\n".join(unpaid_lines) if unpaid_lines else "   ✨ <i>全數繳齊！</i>"
             
-            # 3. 待租中
+            # 3. 待租房間
             vacant_lines = []
             for t in sorted_vacant_objs:
                 vacant_lines.append(f"⚪ {t.get('room','')} (待租中)")
@@ -370,8 +380,8 @@ def send_main_menu():
                 f"\n📍 <b>【{loc}地區】財務統計</b>\n"
                 f"💰 實收租金：<b>{recv_r} / {exp_r} 元</b>\n"
                 f"📈 租金進度：{progress:0.1f}%\n\n"
-                f"✅ <b>已收租房間：</b>\n{paid_summary}\n"
-                f"⚠️ <b>未收租房間：</b>\n{unpaid_summary}"
+                f"✅ <b>租金已繳房間：</b>\n{paid_summary}\n"
+                f"⚠️ <b>租金未繳房間：</b>\n{unpaid_summary}"
                 f"{vacant_summary}\n"
                 f"=============================="
             )
